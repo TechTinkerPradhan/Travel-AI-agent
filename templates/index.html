@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel Assistant</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container py-4">
+        <header class="text-center mb-5">
+            <h1 class="display-4">AI Travel Assistant</h1>
+            <p class="lead">Your personal travel planning companion</p>
+        </header>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Travel Preferences</h5>
+                        <form id="preferencesForm">
+                            <div class="mb-3">
+                                <label for="budget" class="form-label">Budget Range</label>
+                                <select class="form-select" id="budget" name="budget">
+                                    <option value="budget">Budget</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="luxury">Luxury</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="travelStyle" class="form-label">Travel Style</label>
+                                <select class="form-select" id="travelStyle" name="travelStyle">
+                                    <option value="adventure">Adventure</option>
+                                    <option value="relaxation">Relaxation</option>
+                                    <option value="culture">Cultural</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save Preferences</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card chat-container">
+                    <div class="card-body">
+                        <div id="chatMessages" class="chat-messages mb-3">
+                            <div class="message system">
+                                Hello! I'm your AI travel assistant. How can I help you plan your next trip?
+                            </div>
+                        </div>
+                        <form id="chatForm" class="chat-input">
+                            <div class="input-group">
+                                <input type="text" id="messageInput" class="form-control" 
+                                       placeholder="Type your message..." required>
+                                <button class="btn btn-primary" type="submit">
+                                    <i data-feather="send"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script>
+        feather.replace();
+    </script>
+</body>
+</html>
