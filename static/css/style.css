@@ -27,6 +27,12 @@
     margin-right: auto;
 }
 
+.message.error {
+    background-color: var(--bs-danger-bg-subtle);
+    color: var(--bs-danger);
+    border: 1px solid var(--bs-danger-border-subtle);
+}
+
 .chat-input {
     padding: 1rem;
     border-top: 1px solid var(--bs-border-color);

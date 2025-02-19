@@ -7,9 +7,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    function addMessage(content, isUser = false) {
+    function addMessage(content, isUser = false, isError = false) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isUser ? 'user' : 'system'}`;
+        messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
         messageDiv.textContent = content;
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -24,9 +24,18 @@ document.addEventListener('DOMContentLoaded', function() {
         return loadingDiv;
     }
 
+    function handleError(error, loadingMessage) {
+        loadingMessage.remove();
+        if (error.status === 429) {
+            addMessage('The service is currently experiencing high traffic. Please try again in a few moments.', false, true);
+        } else {
+            addMessage('Sorry, there was an error processing your request. Please try again.', false, true);
+        }
+    }
+
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         const message = messageInput.value.trim();
         if (!message) return;
 
@@ -50,24 +59,23 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const data = await response.json();
-            
+
             // Remove loading indicator
             loadingMessage.remove();
 
             if (data.status === 'success') {
                 addMessage(data.response);
             } else {
-                addMessage('Sorry, there was an error processing your request.');
+                handleError({ status: response.status }, loadingMessage);
             }
         } catch (error) {
-            loadingMessage.remove();
-            addMessage('Sorry, there was an error connecting to the server.');
+            handleError(error, loadingMessage);
         }
     });
 
     preferencesForm.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         const preferences = {
             budget: document.getElementById('budget').value,
             travelStyle: document.getElementById('travelStyle').value
@@ -86,14 +94,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const data = await response.json();
-            
+
             if (data.status === 'success') {
                 addMessage('Preferences updated successfully! How can I help you plan your trip?');
             } else {
-                addMessage('Sorry, there was an error saving your preferences.');
+                addMessage('Sorry, there was an error saving your preferences.', false, true);
             }
         } catch (error) {
-            addMessage('Sorry, there was an error connecting to the server.');
+            addMessage('Sorry, there was an error connecting to the server.', false, true);
         }
     });
 });
