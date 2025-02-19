@@ -3,7 +3,11 @@ import time
 import random
 import logging
 from openai import OpenAI, RateLimitError
-from services.ai_agents import AgentRegistry, AgentRole # Added import for AgentRole
+from services.ai_agents import AgentRegistry, AgentRole
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your-api-key")
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -20,6 +24,8 @@ def generate_travel_plan(message, user_preferences):
         try:
             # Get the most appropriate agent for the query
             agent = agent_registry.get_best_agent_for_query(message)
+            logger.debug(f"Selected agent role: {agent.role.value}")
+            logger.debug(f"Agent temperature: {agent.temperature}")
 
             # Prepare context with user preferences
             preferences_context = "\n".join([
@@ -27,10 +33,14 @@ def generate_travel_plan(message, user_preferences):
                 for key, value in user_preferences.items()
                 if value
             ])
+            logger.debug(f"User preferences context: {preferences_context}")
 
             # Generate two alternative responses with slightly different temperatures
             responses = []
             for temp_adjustment in [-0.1, 0.1]:
+                adjusted_temp = agent.temperature + temp_adjustment
+                logger.debug(f"Generating response with temperature: {adjusted_temp}")
+
                 system_prompt = f"""{agent.system_prompt}
                 Additionally, provide your response in a well-formatted structure with:
                 - Clear headings using markdown (##)
@@ -50,9 +60,7 @@ def generate_travel_plan(message, user_preferences):
                 4. Cost considerations where applicable
                 """
 
-                logging.debug(f"Attempt {attempt + 1} of {max_retries} to generate travel plan")
-                logging.debug(f"Using agent role: {agent.role.value}")
-
+                logger.debug(f"Making OpenAI API call for response {len(responses) + 1}")
                 response = client.chat.completions.create(
                     model="gpt-4",
                     messages=[
@@ -60,13 +68,15 @@ def generate_travel_plan(message, user_preferences):
                         {"role": "user", "content": full_prompt}
                     ],
                     max_tokens=2000,
-                    temperature=agent.temperature + temp_adjustment
+                    temperature=adjusted_temp
                 )
 
-                responses.append(response.choices[0].message.content)
+                content = response.choices[0].message.content
+                logger.debug(f"Received response {len(responses) + 1} (length: {len(content)})")
+                responses.append(content)
 
             # Format the responses for presentation
-            return {
+            formatted_response = {
                 "status": "success",
                 "agent_type": agent.role.value,
                 "alternatives": [
@@ -77,34 +87,43 @@ def generate_travel_plan(message, user_preferences):
                     for i, response in enumerate(responses)
                 ]
             }
+            logger.debug(f"Formatted final response with {len(formatted_response['alternatives'])} alternatives")
+            return formatted_response
 
-        except RateLimitError:
-            if attempt == max_retries - 1:  # Last attempt
+        except RateLimitError as e:
+            logger.error(f"Rate limit error on attempt {attempt + 1}: {str(e)}")
+            if attempt == max_retries - 1:
                 raise Exception(
                     "We're experiencing high traffic. Please wait 30 seconds and try again. "
                     "This helps ensure a better response when you retry."
                 )
 
-            # Exponential backoff with jitter
             jitter = random.uniform(1, 3)
             delay = (base_delay * (2 ** attempt)) + jitter
-            logging.debug(f"Rate limit hit, waiting {delay:.2f} seconds before retry")
+            logger.info(f"Rate limit hit, waiting {delay:.2f} seconds before retry")
             time.sleep(delay)
             continue
 
         except Exception as e:
-            logging.error(f"Error generating travel plan: {str(e)}")
+            logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
             raise Exception(f"Failed to generate travel plan: {str(e)}")
 
 def analyze_user_preferences(query: str, selected_response: str):
     """
     Analyze user preferences based on their query and selected response
     """
+    logger.debug("Starting preference analysis")
+    logger.debug(f"Query: {query}")
+    logger.debug(f"Selected response length: {len(selected_response)}")
+
     try:
         # Get the preference analyzer agent
         analyzer = agent_registry.get_agent(AgentRole.PREFERENCE_ANALYZER)
         if not analyzer:
+            logger.error("Preference analyzer agent not found")
             raise ValueError("Preference analyzer agent not found")
+
+        logger.debug("Successfully retrieved preference analyzer agent")
 
         system_prompt = analyzer.system_prompt
         analysis_prompt = f"""
@@ -128,6 +147,7 @@ def analyze_user_preferences(query: str, selected_response: str):
         }}
         """
 
+        logger.debug("Making OpenAI API call for preference analysis")
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -138,8 +158,10 @@ def analyze_user_preferences(query: str, selected_response: str):
             temperature=0.3
         )
 
-        return response.choices[0].message.content
+        analysis_result = response.choices[0].message.content
+        logger.debug(f"Received preference analysis (length: {len(analysis_result)})")
+        return analysis_result
 
     except Exception as e:
-        logging.error(f"Error analyzing preferences: {str(e)}")
+        logger.error(f"Error analyzing preferences: {str(e)}", exc_info=True)
         raise Exception(f"Failed to analyze preferences: {str(e)}")
