@@ -32,9 +32,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function createResponseOption(optionData, query) {
+        console.log('Creating response option:', optionData);
         const optionDiv = document.createElement('div');
         optionDiv.className = 'message system response-option';
-        optionDiv.innerHTML = marked.parse(optionData.content);
+
+        // Ensure the content is properly sanitized and formatted
+        try {
+            optionDiv.innerHTML = marked.parse(optionData.content);
+        } catch (e) {
+            console.error('Error parsing markdown:', e);
+            optionDiv.textContent = optionData.content;
+        }
 
         const selectButton = document.createElement('button');
         selectButton.className = 'btn btn-sm btn-outline-primary mt-2 select-response-btn';
@@ -74,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         selectButton.addEventListener('click', async () => {
             try {
+                console.log('Selecting response:', optionData);
                 const response = await fetch('/api/chat/select', {
                     method: 'POST',
                     headers: {
@@ -114,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } catch (error) {
                 console.error('Error selecting response:', error);
+                addMessage('Error processing your selection. Please try again.', false, true);
             }
         });
 
@@ -128,8 +138,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof content === 'string') {
             messageDiv.textContent = content;
         } else if (content.alternatives) {
+            console.log('Received alternatives:', content.alternatives);
             messageDiv.innerHTML = `<div class="response-options">
-                <h6 class="mb-3">Here are two tailored recommendations:</h6>
+                <h6 class="mb-3">Here are some tailored recommendations:</h6>
             </div>`;
             content.alternatives.forEach(option => {
                 const optionElement = createResponseOption(option, messageInput.value);
@@ -178,7 +189,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
@@ -193,6 +203,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const loadingMessage = showLoading();
 
         try {
+            console.log('Sending chat request:', message);
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
@@ -205,20 +216,19 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const data = await response.json();
+            console.log('Received chat response:', data);
 
             // Remove loading indicator
             loadingMessage.remove();
 
             if (data.status === 'success') {
                 addMessage(data.response);
-                // Add a small delay between requests
                 disableSubmit(5); // 5 second cooldown between requests
-
-                //Removed calendar addition logic from here.  Now handled in createResponseOption
             } else {
                 handleError({ status: response.status }, loadingMessage);
             }
         } catch (error) {
+            console.error('Chat request error:', error);
             handleError(error, loadingMessage);
         }
     });

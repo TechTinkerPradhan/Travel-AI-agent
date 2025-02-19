@@ -73,6 +73,7 @@ def generate_travel_plan(message, user_preferences):
 
                 content = response.choices[0].message.content
                 logger.debug(f"Received response {len(responses) + 1} (length: {len(content)})")
+                logger.debug(f"Response content preview: {content[:200]}...")
                 responses.append(content)
 
             # Format the responses for presentation
@@ -88,6 +89,7 @@ def generate_travel_plan(message, user_preferences):
                 ]
             }
             logger.debug(f"Formatted final response with {len(formatted_response['alternatives'])} alternatives")
+            logger.debug(f"Response structure: {formatted_response.keys()}")
             return formatted_response
 
         except RateLimitError as e:
