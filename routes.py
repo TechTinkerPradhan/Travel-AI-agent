@@ -1,7 +1,10 @@
 import json
 from flask import jsonify, request, render_template
 from services.openai_service import generate_travel_plan
-from services.storage_service import save_user_preferences, get_user_preferences
+from services.airtable_service import AirtableService
+
+# Initialize Airtable service
+airtable_service = AirtableService()
 
 def register_routes(app):
     @app.route('/')
@@ -27,10 +30,12 @@ def register_routes(app):
 
             user_id = data.get('user_id', 'default')
 
-            # Get user preferences
-            preferences = get_user_preferences(user_id)
+            # Get user preferences from Airtable
+            preferences = airtable_service.get_user_preferences(user_id)
+            if preferences is None:
+                preferences = {}  # Default empty preferences if user not found
 
-            # Generate response using OpenAI with retry logic
+            # Generate response using OpenAI
             response = generate_travel_plan(message, preferences)
 
             return jsonify({
@@ -62,7 +67,8 @@ def register_routes(app):
             user_id = data.get('user_id', 'default')
             preferences = data.get('preferences', {})
 
-            save_user_preferences(user_id, preferences)
+            # Save preferences to Airtable
+            airtable_service.save_user_preferences(user_id, preferences)
 
             return jsonify({
                 'status': 'success',
@@ -71,5 +77,5 @@ def register_routes(app):
         except Exception as e:
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to update preferences. Please try again.'
+                'message': f'Failed to update preferences: {str(e)}'
             }), 500
