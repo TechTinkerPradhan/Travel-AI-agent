@@ -103,6 +103,8 @@ def analyze_user_preferences(query: str, selected_response: str):
     try:
         # Get the preference analyzer agent
         analyzer = agent_registry.get_agent(AgentRole.PREFERENCE_ANALYZER)
+        if not analyzer:
+            raise ValueError("Preference analyzer agent not found")
 
         system_prompt = analyzer.system_prompt
         analysis_prompt = f"""
