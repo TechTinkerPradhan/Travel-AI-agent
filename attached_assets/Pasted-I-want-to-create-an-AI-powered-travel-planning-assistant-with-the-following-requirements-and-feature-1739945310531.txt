@@ -1,0 +1,71 @@
+I want to create an AI-powered travel planning assistant with the following requirements and features:
+
+Core AI/Backend (Python + OpenAI)
+
+Must integrate with OpenAI’s API for generating travel itineraries and conversation responses.
+Provide endpoints (e.g., via FastAPI) for outside services (like Voiceflow) to call.
+Voiceflow Integration (Frontend)
+
+The user can interact via voice or text-based chatbot, powered by Voiceflow.
+The assistant’s conversational output should be routed to Voiceflow blocks.
+Data Management (Airtable)
+
+Store and retrieve user preferences (e.g., budget, travel history, favorite destinations).
+Save generated itineraries, user IDs, and related metadata to Airtable.
+Replit Agents
+
+Utilize multiple specialized “agents” if needed (Planner Agent, Calendar Agent, Airtable Agent, etc.).
+Keep the application modular so each agent has a distinct responsibility.
+Google Calendar Sync
+
+Automatically create, update, or delete calendar events based on user-approved itineraries or activities.
+Use the Google Calendar API with appropriate OAuth credentials.
+Website-Embeddable Chat Window
+
+Provide an additional chat interface that can be embedded on a personal website or landing page.
+This chat window should call the same backend endpoints to handle user queries.
+Personalized Travel Recommendations
+
+Factor in user’s interests, budget constraints, weather/seasonal details, etc.
+Adapt suggestions in real time based on user feedback (e.g., “too expensive,” “I prefer beaches,” etc.).
+Cursor Support (Optional)
+
+Leverage Cursor or an AI code assistant for local development synergy.
+Key Points to Address / Steps to Implement
+Project Structure
+
+Create a Python-based backend (e.g., main.py) using FastAPI or Flask.
+Organize the logic into multiple agent classes (PlannerAgent, CalendarAgent, AirtableAgent).
+Include a requirements.txt or pyproject.toml with the necessary dependencies (openai, fastapi, pyairtable, google-api-python-client, etc.).
+Endpoints
+
+/chat: Receives user messages, calls the PlannerAgent (which calls OpenAI) for itinerary suggestions, and returns the AI’s response.
+/add_event: Calls the CalendarAgent to create Google Calendar events.
+Additional endpoints to fetch or store data in Airtable.
+Voiceflow Integration
+
+Provide instructions or examples for how Voiceflow will call these endpoints with user messages.
+Return the assistant’s text to Voiceflow so it can be spoken aloud or displayed in a conversation flow.
+Airtable Management
+
+Use pyairtable (or direct REST calls) to store user itineraries and preferences.
+Optionally fetch user records based on an ID, or create a new record if user data doesn’t exist yet.
+Google Calendar Setup
+
+Securely store OAuth credentials (e.g., token.json or environment variables).
+Verify that event times, time zones, and user confirmations are handled properly.
+Website Chat Widget
+
+Provide a minimal frontend (HTML/JS or React) that queries the /chat endpoint and displays the conversation.
+Ensure it’s easily embeddable in any website.
+Testing & Deployment
+
+Run all agents and endpoints on Replit.
+Validate that the application works end-to-end: user messages → AI response → itinerary → saving to Airtable → optional Google Calendar event creation.
+Extra Features (if time permits):
+
+Add real-time flight/hotel data from an external API.
+Incorporate cost estimates and currency conversions.
+Provide advanced personalization for each user based on past trips or explicit preferences.
+Please generate a starter template in Python that meets these requirements, including any recommended file structure, sample endpoints, and minimal placeholders for each agent. The code should be well commented and easy to expand with more features later.
+
