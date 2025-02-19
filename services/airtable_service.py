@@ -51,12 +51,13 @@ class AirtableService:
         """Save user preferences to Airtable"""
         try:
             # Check if user already exists
-            existing_records = self.preferences_table.all(formula=f"{{UserID}} = '{user_id}'")
+            # Note: Using 'User ID' as the field name (with space) as it appears in Airtable
+            existing_records = self.preferences_table.all(formula=f"{{'User ID'}} = '{user_id}'")
 
             fields = {
-                'UserID': user_id,
+                'User ID': user_id,  # Changed from 'UserID' to 'User ID'
                 'Budget': preferences.get('budget'),
-                'TravelStyle': preferences.get('travelStyle')
+                'Travel Style': preferences.get('travelStyle')  # Changed from 'TravelStyle' to 'Travel Style'
             }
 
             if existing_records:
@@ -71,12 +72,12 @@ class AirtableService:
     def get_user_preferences(self, user_id: str) -> Optional[Dict]:
         """Retrieve user preferences from Airtable"""
         try:
-            records = self.preferences_table.all(formula=f"{{UserID}} = '{user_id}'")
+            records = self.preferences_table.all(formula=f"{{'User ID'}} = '{user_id}'")
             if records:
                 record = records[0]['fields']
                 return {
                     'budget': record.get('Budget'),
-                    'travelStyle': record.get('TravelStyle')
+                    'travelStyle': record.get('Travel Style')
                 }
             return None
         except Exception as e:
