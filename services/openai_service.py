@@ -4,8 +4,6 @@ import random
 import logging
 from openai import OpenAI, RateLimitError
 
-# the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
-# do not change this unless explicitly requested by the user
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your-api-key")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -13,8 +11,8 @@ def generate_travel_plan(message, user_preferences):
     """
     Generate travel recommendations using OpenAI's API with retry logic
     """
-    max_retries = 5  # Increased from 3 to 5
-    base_delay = 3  # Increased from 2 to 3 seconds
+    max_retries = 5
+    base_delay = 3
 
     for attempt in range(max_retries):
         try:
@@ -34,12 +32,12 @@ def generate_travel_plan(message, user_preferences):
 
             logging.debug(f"Attempt {attempt + 1} of {max_retries} to generate travel plan")
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": full_prompt}
                 ],
-                max_tokens=2000,  # Increased token limit
+                max_tokens=2000,
                 temperature=0.7
             )
 
@@ -53,8 +51,8 @@ def generate_travel_plan(message, user_preferences):
                 )
 
             # Exponential backoff with jitter
-            jitter = random.uniform(1, 3)  # Random value between 1 and 3
-            delay = (base_delay * (2 ** attempt)) + jitter  # 4-6s, 7-9s, 13-15s, 25-27s, 49-51s
+            jitter = random.uniform(1, 3)
+            delay = (base_delay * (2 ** attempt)) + jitter
             logging.debug(f"Rate limit hit, waiting {delay:.2f} seconds before retry")
             time.sleep(delay)
             continue
