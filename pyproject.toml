@@ -13,5 +13,6 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pyairtable>=3.0.1",
     "routes>=2.5.1",
+    "trafilatura>=2.0.0",
     "twilio>=9.4.5",
 ]
