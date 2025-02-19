@@ -48,38 +48,50 @@
     animation: spin 1s linear infinite;
 }
 
-.btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-    transition: opacity 0.3s ease;
+.response-option {
+    background-color: var(--bs-dark-bg-subtle);
+    border: 1px solid var(--bs-border-color);
+    margin-bottom: 1rem;
+    width: 100%;
+    max-width: 100%;
 }
 
-.add-to-calendar-btn {
+.response-option:hover {
+    border-color: var(--bs-primary);
+}
+
+.response-option h2 {
+    font-size: 1.25rem;
     margin-top: 0.5rem;
+}
+
+.response-option pre {
+    background-color: var(--bs-dark);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0.5rem 0;
+}
+
+.select-response-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.add-to-calendar-btn i {
-    width: 1rem;
-    height: 1rem;
+.preference-analysis {
+    background-color: var(--bs-dark);
+    font-size: 0.875rem;
 }
 
-#calendarStatus {
-    text-align: center;
+.preference-analysis pre {
+    margin: 0.5rem 0 0;
+    white-space: pre-wrap;
 }
 
-#calendarStatus .text-success {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-#calendarStatus i {
-    width: 1rem;
-    height: 1rem;
+.btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transition: opacity 0.3s ease;
 }
 
 @keyframes spin {

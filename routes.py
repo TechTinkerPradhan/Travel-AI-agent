@@ -11,6 +11,11 @@ from google.oauth2.credentials import Credentials
 airtable_service = AirtableService()
 calendar_service = CalendarService()
 
+def analyze_user_preferences(original_query, selected_response):
+    # Placeholder implementation - replace with actual preference analysis logic
+    return {"preference1": "value1", "preference2": "value2"}
+
+
 def register_routes(app):
     @app.route('/')
     def index():
@@ -44,13 +49,11 @@ def register_routes(app):
                 logging.error(f"Error fetching preferences: {str(e)}")
                 preferences = {}
 
-            # Generate response using OpenAI
+            # Generate responses using OpenAI
             response = generate_travel_plan(message, preferences)
 
-            return jsonify({
-                'status': 'success',
-                'response': response
-            })
+            return jsonify(response)
+
         except Exception as e:
             error_message = str(e)
             if "high traffic" in error_message.lower():
@@ -61,6 +64,44 @@ def register_routes(app):
             return jsonify({
                 'status': 'error',
                 'message': f'An error occurred: {error_message}'
+            }), 500
+
+    @app.route('/api/chat/select', methods=['POST'])
+    def select_response():
+        try:
+            data = request.json
+            if not data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No data provided'
+                }), 400
+
+            original_query = data.get('original_query', '')
+            selected_response = data.get('selected_response', '')
+            user_id = data.get('user_id', 'default')
+
+            if not all([original_query, selected_response]):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Missing required fields'
+                }), 400
+
+            # Analyze preferences based on selection
+            preference_analysis = analyze_user_preferences(original_query, selected_response)
+
+            # Store the analysis in Airtable (you can implement this later)
+            # airtable_service.save_preference_analysis(user_id, preference_analysis)
+
+            return jsonify({
+                'status': 'success',
+                'preference_analysis': preference_analysis
+            })
+
+        except Exception as e:
+            logging.error(f"Error processing response selection: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to process selection: {str(e)}'
             }), 500
 
     @app.route('/api/preferences', methods=['POST'])
@@ -192,7 +233,7 @@ def register_routes(app):
                 'status': 'error',
                 'message': f'Failed to create calendar event: {str(e)}'
             }), 500
-    
+
     @app.route('/api/calendar/status')
     def calendar_status():
         """Check if user is authenticated with Google Calendar"""

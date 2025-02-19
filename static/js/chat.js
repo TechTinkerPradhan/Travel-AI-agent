@@ -10,10 +10,78 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
+    function createResponseOption(optionData, query) {
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'message system response-option';
+        optionDiv.innerHTML = marked.parse(optionData.content);
+
+        const selectButton = document.createElement('button');
+        selectButton.className = 'btn btn-sm btn-outline-primary mt-2 select-response-btn';
+        selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
+
+        selectButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/chat/select', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        original_query: query,
+                        selected_response: optionData.content
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Hide other options
+                    const options = chatMessages.querySelectorAll('.response-option');
+                    options.forEach(option => {
+                        if (option !== optionDiv) {
+                            option.style.display = 'none';
+                        }
+                    });
+
+                    // Update selected option appearance
+                    selectButton.disabled = true;
+                    selectButton.innerHTML = '<i data-feather="check-circle"></i> Selected';
+                    feather.replace();
+
+                    // Add preference analysis if available
+                    if (data.preference_analysis) {
+                        const analysisDiv = document.createElement('div');
+                        analysisDiv.className = 'message system preference-analysis mt-2';
+                        analysisDiv.innerHTML = `<small class="text-muted">Preferences identified:</small><pre>${JSON.stringify(JSON.parse(data.preference_analysis), null, 2)}</pre>`;
+                        chatMessages.appendChild(analysisDiv);
+                    }
+                }
+            } catch (error) {
+                console.error('Error selecting response:', error);
+            }
+        });
+
+        optionDiv.appendChild(selectButton);
+        feather.replace();
+        return optionDiv;
+    }
+
     function addMessage(content, isUser = false, isError = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
-        messageDiv.textContent = content;
+
+        if (typeof content === 'string') {
+            messageDiv.textContent = content;
+        } else if (content.alternatives) {
+            messageDiv.innerHTML = `<div class="response-options">
+                <h6 class="mb-3">Here are two tailored recommendations:</h6>
+            </div>`;
+            content.alternatives.forEach(option => {
+                const optionElement = createResponseOption(option, messageInput.value);
+                messageDiv.querySelector('.response-options').appendChild(optionElement);
+            });
+        }
+
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
@@ -112,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 disableSubmit(5); // 5 second cooldown between requests
 
                 // Check if the response contains travel dates and offer to add to calendar
-                if (data.response.toLowerCase().includes('itinerary') || 
+                if (data.response.toLowerCase().includes('itinerary') ||
                     data.response.toLowerCase().includes('schedule')) {
                     const addToCalendarMsg = document.createElement('div');
                     addToCalendarMsg.className = 'message system';
