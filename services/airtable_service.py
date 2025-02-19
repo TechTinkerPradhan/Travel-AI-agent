@@ -65,7 +65,7 @@ class AirtableService:
 
             fields = {
                 'User ID': user_id,
-                'Budget': preferences.get('budget'),
+                'Budget Preference': preferences.get('budget'),
                 'Travel Style': preferences.get('travelStyle')
             }
 
@@ -81,7 +81,6 @@ class AirtableService:
 
         except Exception as e:
             logging.error(f"Error saving user preferences: {str(e)}")
-            # Include more context in the error message
             error_context = f"Failed to save preferences for user {user_id} with fields {preferences}"
             logging.error(error_context)
             raise ValueError(f"Airtable Error: {str(e)}\nContext: {error_context}")
@@ -89,7 +88,6 @@ class AirtableService:
     def get_user_preferences(self, user_id: str) -> Optional[Dict]:
         """Retrieve user preferences from Airtable"""
         try:
-            # Use the same formula format as in save
             formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
             logging.debug(f"Fetching preferences with formula: {formula}")
 
@@ -97,7 +95,7 @@ class AirtableService:
             if records:
                 record = records[0]['fields']
                 return {
-                    'budget': record.get('Budget'),
+                    'budget': record.get('Budget Preference'),
                     'travelStyle': record.get('Travel Style')
                 }
             return None
