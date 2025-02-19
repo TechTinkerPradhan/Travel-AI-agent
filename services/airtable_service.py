@@ -19,7 +19,7 @@ class AirtableService:
             )
 
         # Clean up base ID - remove any trailing paths or slashes
-        self.base_id = self.base_id.split('/')[0]
+        self.base_id = self.base_id.split('/')[0].strip()
         logging.info(f"Using base ID: {self.base_id}")
 
         # Define table names
@@ -50,10 +50,12 @@ class AirtableService:
     def save_user_preferences(self, user_id: str, preferences: Dict) -> Dict:
         """Save user preferences to Airtable"""
         try:
-            # Check if user already exists
-            # Using RECORD_ID() to ensure formula syntax is correct
-            formula = f"User ID = '{user_id}'"
+            # Properly escape field name with curly braces for the formula
+            formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
+            logging.debug(f"Searching with formula: {formula}")
+
             existing_records = self.preferences_table.all(formula=formula)
+            logging.debug(f"Found {len(existing_records)} existing records")
 
             fields = {
                 'User ID': user_id,
@@ -61,19 +63,31 @@ class AirtableService:
                 'Travel Style': preferences.get('travelStyle')
             }
 
+            logging.debug(f"Preparing to save fields: {fields}")
+
             if existing_records:
                 record_id = existing_records[0]['id']
+                logging.debug(f"Updating existing record: {record_id}")
                 return self.preferences_table.update(record_id, fields)
             else:
+                logging.debug("Creating new record")
                 return self.preferences_table.create(fields)
+
         except Exception as e:
             logging.error(f"Error saving user preferences: {str(e)}")
-            raise
+            # Include more context in the error message
+            error_context = f"Failed to save preferences for user {user_id} with fields {preferences}"
+            logging.error(error_context)
+            raise ValueError(f"Airtable Error: {str(e)}\nContext: {error_context}")
 
     def get_user_preferences(self, user_id: str) -> Optional[Dict]:
         """Retrieve user preferences from Airtable"""
         try:
-            records = self.preferences_table.all(formula=f"User ID = '{user_id}'")
+            # Use the same formula format as in save
+            formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
+            logging.debug(f"Fetching preferences with formula: {formula}")
+
+            records = self.preferences_table.all(formula=formula)
             if records:
                 record = records[0]['fields']
                 return {
@@ -83,4 +97,4 @@ class AirtableService:
             return None
         except Exception as e:
             logging.error(f"Error retrieving user preferences: {str(e)}")
-            raise
+            raise ValueError(f"Failed to retrieve preferences: {str(e)}")
