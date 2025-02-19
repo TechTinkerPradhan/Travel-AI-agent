@@ -9,6 +9,7 @@ class AirtableService:
         self.base_id = os.environ.get("AIRTABLE_BASE_ID")
 
         logging.info("Initializing Airtable Service...")
+        logging.info(f"Using base ID: {self.base_id}")
 
         if not self.access_token or not self.base_id:
             logging.error("Missing Airtable credentials")
@@ -20,7 +21,6 @@ class AirtableService:
 
         # Clean up base ID - remove any trailing paths or slashes
         self.base_id = self.base_id.split('/')[0].strip()
-        logging.info(f"Using base ID: {self.base_id}")
 
         # Define table names
         self.USER_PREFERENCES = "User Preferences"
@@ -29,18 +29,24 @@ class AirtableService:
         self._test_connection()
 
     def _test_connection(self):
-        """Test connection to Airtable"""
+        """Test connection to Airtable and print table information"""
         try:
             # Initialize table
             logging.info(f"Attempting to connect to table: {self.USER_PREFERENCES}")
             self.preferences_table = Table(self.access_token, self.base_id, self.USER_PREFERENCES)
 
-            # Try to list records
-            logging.info("Attempting to list records...")
+            # Try to list records and print schema information
+            logging.info("Attempting to list records and get schema...")
             records = self.preferences_table.all(max_records=1)
 
-            # Log success
-            logging.info(f"Successfully connected to table. Found {len(records)} records.")
+            if records:
+                # Print field names from the first record
+                field_names = list(records[0]['fields'].keys())
+                logging.info(f"Available fields in table: {field_names}")
+                logging.info(f"Total records found: {len(records)}")
+                logging.info(f"Sample record (fields only): {records[0]['fields']}")
+            else:
+                logging.info("Table exists but no records found")
 
         except Exception as e:
             logging.error(f"Airtable connection error: {str(e)}")
