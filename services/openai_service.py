@@ -3,34 +3,49 @@ import time
 import random
 import logging
 from openai import OpenAI, RateLimitError
+from services.ai_agents import AgentRegistry
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your-api-key")
 client = OpenAI(api_key=OPENAI_API_KEY)
+agent_registry = AgentRegistry()
 
 def generate_travel_plan(message, user_preferences):
     """
-    Generate travel recommendations using OpenAI's API with retry logic
+    Generate travel recommendations using OpenAI's API with specialized agents
     """
     max_retries = 5
     base_delay = 3
 
     for attempt in range(max_retries):
         try:
-            system_prompt = """You are a knowledgeable travel assistant. Create personalized travel 
-            recommendations based on user preferences. Focus on providing practical, detailed itineraries 
-            that include activities, estimated costs, and timing."""
+            # Get the most appropriate agent for the query
+            agent = agent_registry.get_best_agent_for_query(message)
 
-            # Prepare the message with user preferences context
-            full_prompt = f"""User preferences: {user_preferences}
+            # Prepare context with user preferences
+            preferences_context = "\n".join([
+                f"{key}: {value}" 
+                for key, value in user_preferences.items()
+                if value
+            ])
+
+            # Use the agent's specialized system prompt
+            system_prompt = agent.system_prompt
+
+            # Prepare the full prompt with context
+            full_prompt = f"""User preferences: {preferences_context}
             User message: {message}
-            Please provide a detailed travel recommendation that includes:
-            1. Suggested duration
-            2. Best time to visit
-            3. Day-by-day itinerary
-            4. Estimated costs
-            5. Travel tips"""
+
+            Provide recommendations based on your expertise as a {agent.role.value} specialist.
+            Consider the following aspects:
+            1. User's specific request and preferences
+            2. Your specialized domain knowledge
+            3. Practical implementation details
+            4. Cost considerations where applicable
+            """
 
             logging.debug(f"Attempt {attempt + 1} of {max_retries} to generate travel plan")
+            logging.debug(f"Using agent role: {agent.role.value}")
+
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -38,7 +53,7 @@ def generate_travel_plan(message, user_preferences):
                     {"role": "user", "content": full_prompt}
                 ],
                 max_tokens=2000,
-                temperature=0.7
+                temperature=agent.temperature
             )
 
             return response.choices[0].message.content
