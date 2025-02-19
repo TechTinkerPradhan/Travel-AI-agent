@@ -48,6 +48,12 @@
     animation: spin 1s linear infinite;
 }
 
+.btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transition: opacity 0.3s ease;
+}
+
 @keyframes spin {
     to { transform: rotate(360deg); }
 }

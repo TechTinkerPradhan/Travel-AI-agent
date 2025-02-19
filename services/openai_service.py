@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import logging
 from openai import OpenAI, RateLimitError
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
@@ -12,8 +13,8 @@ def generate_travel_plan(message, user_preferences):
     """
     Generate travel recommendations using OpenAI's API with retry logic
     """
-    max_retries = 3
-    base_delay = 2  # Increased initial delay
+    max_retries = 5  # Increased from 3 to 5
+    base_delay = 3  # Increased from 2 to 3 seconds
 
     for attempt in range(max_retries):
         try:
@@ -31,6 +32,7 @@ def generate_travel_plan(message, user_preferences):
             4. Estimated costs
             5. Travel tips"""
 
+            logging.debug(f"Attempt {attempt + 1} of {max_retries} to generate travel plan")
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -45,12 +47,18 @@ def generate_travel_plan(message, user_preferences):
 
         except RateLimitError:
             if attempt == max_retries - 1:  # Last attempt
-                raise Exception("We're experiencing high traffic. Please try again in a few moments.")
+                raise Exception(
+                    "We're experiencing high traffic. Please wait 30 seconds and try again. "
+                    "This helps ensure a better response when you retry."
+                )
 
             # Exponential backoff with jitter
-            delay = (base_delay * (2 ** attempt)) + (random.random() * 2)  # 2-4s, 4-6s, 8-10s
+            jitter = random.uniform(1, 3)  # Random value between 1 and 3
+            delay = (base_delay * (2 ** attempt)) + jitter  # 4-6s, 7-9s, 13-15s, 25-27s, 49-51s
+            logging.debug(f"Rate limit hit, waiting {delay:.2f} seconds before retry")
             time.sleep(delay)
             continue
 
         except Exception as e:
+            logging.error(f"Error generating travel plan: {str(e)}")
             raise Exception(f"Failed to generate travel plan: {str(e)}")

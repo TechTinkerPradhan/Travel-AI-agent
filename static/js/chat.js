@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const messageInput = document.getElementById('messageInput');
     const chatMessages = document.getElementById('chatMessages');
     const preferencesForm = document.getElementById('preferencesForm');
+    const submitButton = chatForm.querySelector('button[type="submit"]');
 
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -24,10 +25,29 @@ document.addEventListener('DOMContentLoaded', function() {
         return loadingDiv;
     }
 
+    function disableSubmit(seconds) {
+        submitButton.disabled = true;
+        const originalText = submitButton.innerHTML;
+        let timeLeft = seconds;
+
+        const interval = setInterval(() => {
+            submitButton.innerHTML = `Wait ${timeLeft}s`;
+            timeLeft--;
+
+            if (timeLeft < 0) {
+                clearInterval(interval);
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
+            }
+        }, 1000);
+    }
+
     function handleError(error, loadingMessage) {
         loadingMessage.remove();
         if (error.status === 429) {
-            addMessage('The service is currently experiencing high traffic. Please try again in a few moments.', false, true);
+            const waitTime = 30; // 30 seconds wait time
+            addMessage('The service is currently experiencing high traffic. Please wait 30 seconds before trying again.', false, true);
+            disableSubmit(waitTime);
         } else {
             addMessage('Sorry, there was an error processing your request. Please try again.', false, true);
         }
@@ -65,6 +85,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (data.status === 'success') {
                 addMessage(data.response);
+                // Add a small delay between requests
+                disableSubmit(5); // 5 second cooldown between requests
             } else {
                 handleError({ status: response.status }, loadingMessage);
             }
