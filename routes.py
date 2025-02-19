@@ -12,8 +12,16 @@ airtable_service = AirtableService()
 calendar_service = CalendarService()
 
 def analyze_user_preferences(original_query, selected_response):
-    # Placeholder implementation - replace with actual preference analysis logic
-    return {"preference1": "value1", "preference2": "value2"}
+    """Analyze user preferences using the OpenAI service"""
+    from services.openai_service import analyze_user_preferences as ai_analyze_preferences
+    try:
+        return ai_analyze_preferences(original_query, selected_response)
+    except Exception as e:
+        logging.error(f"Error in preference analysis: {str(e)}")
+        return {
+            "error": "Failed to analyze preferences",
+            "details": str(e)
+        }
 
 
 def register_routes(app):

@@ -10,6 +10,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
+    async function createCalendarEvent(eventDetails) {
+        try {
+            const response = await fetch('/api/calendar/event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(eventDetails)
+            });
+
+            const data = await response.json();
+            if (data.status === 'success') {
+                addMessage('Successfully added event to your Google Calendar!');
+            } else {
+                addMessage('Failed to add event to calendar: ' + data.message, false, true);
+            }
+        } catch (error) {
+            addMessage('Error creating calendar event: ' + error.message, false, true);
+        }
+    }
+
     function createResponseOption(optionData, query) {
         const optionDiv = document.createElement('div');
         optionDiv.className = 'message system response-option';
@@ -18,6 +39,38 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectButton = document.createElement('button');
         selectButton.className = 'btn btn-sm btn-outline-primary mt-2 select-response-btn';
         selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
+
+        // Add calendar button if the response contains itinerary-related content
+        const content = optionData.content.toLowerCase();
+        if (content.includes('itinerary') || content.includes('schedule')) {
+            const calendarButton = document.createElement('button');
+            calendarButton.className = 'btn btn-sm btn-outline-secondary mt-2 ms-2';
+            calendarButton.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+
+            calendarButton.addEventListener('click', async () => {
+                const eventDetails = {
+                    summary: 'Travel Itinerary',
+                    description: optionData.content,
+                    start: {
+                        dateTime: new Date().toISOString(),
+                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                    },
+                    end: {
+                        dateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                    }
+                };
+                await createCalendarEvent(eventDetails);
+            });
+
+            const buttonGroup = document.createElement('div');
+            buttonGroup.className = 'd-flex gap-2 mt-2';
+            buttonGroup.appendChild(selectButton);
+            buttonGroup.appendChild(calendarButton);
+            optionDiv.appendChild(buttonGroup);
+        } else {
+            optionDiv.appendChild(selectButton);
+        }
 
         selectButton.addEventListener('click', async () => {
             try {
@@ -52,7 +105,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.preference_analysis) {
                         const analysisDiv = document.createElement('div');
                         analysisDiv.className = 'message system preference-analysis mt-2';
-                        analysisDiv.innerHTML = `<small class="text-muted">Preferences identified:</small><pre>${JSON.stringify(JSON.parse(data.preference_analysis), null, 2)}</pre>`;
+                        analysisDiv.innerHTML = `
+                            <small class="text-muted">Preferences identified:</small>
+                            <pre>${JSON.stringify(JSON.parse(data.preference_analysis), null, 2)}</pre>
+                        `;
                         chatMessages.appendChild(analysisDiv);
                     }
                 }
@@ -61,7 +117,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        optionDiv.appendChild(selectButton);
         feather.replace();
         return optionDiv;
     }
@@ -123,26 +178,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function createCalendarEvent(eventDetails) {
-        try {
-            const response = await fetch('/api/calendar/event', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(eventDetails)
-            });
-
-            const data = await response.json();
-            if (data.status === 'success') {
-                addMessage('Successfully added event to your Google Calendar!');
-            } else {
-                addMessage('Failed to add event to calendar: ' + data.message, false, true);
-            }
-        } catch (error) {
-            addMessage('Error creating calendar event: ' + error.message, false, true);
-        }
-    }
 
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -179,37 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Add a small delay between requests
                 disableSubmit(5); // 5 second cooldown between requests
 
-                // Check if the response contains travel dates and offer to add to calendar
-                if (data.response.toLowerCase().includes('itinerary') ||
-                    data.response.toLowerCase().includes('schedule')) {
-                    const addToCalendarMsg = document.createElement('div');
-                    addToCalendarMsg.className = 'message system';
-                    addToCalendarMsg.innerHTML = `
-                        <p>Would you like to add this itinerary to your Google Calendar?</p>
-                        <button class="btn btn-sm btn-outline-primary add-to-calendar-btn">
-                            <i data-feather="calendar"></i> Add to Calendar
-                        </button>
-                    `;
-                    chatMessages.appendChild(addToCalendarMsg);
-                    feather.replace();
-
-                    // Add click handler for the calendar button
-                    addToCalendarMsg.querySelector('.add-to-calendar-btn').addEventListener('click', async () => {
-                        const eventDetails = {
-                            summary: 'Travel Itinerary',
-                            description: data.response,
-                            start: {
-                                dateTime: new Date().toISOString(),
-                                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                            },
-                            end: {
-                                dateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                            }
-                        };
-                        await createCalendarEvent(eventDetails);
-                    });
-                }
+                //Removed calendar addition logic from here.  Now handled in createResponseOption
             } else {
                 handleError({ status: response.status }, loadingMessage);
             }

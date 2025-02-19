@@ -7,6 +7,8 @@
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <!-- Add marked library for markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="container py-4">
@@ -83,6 +85,11 @@
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
     <script>
         feather.replace();
+        // Configure marked to sanitize HTML
+        marked.setOptions({
+            sanitize: true,
+            breaks: true
+        });
     </script>
 </body>
 </html>
