@@ -136,16 +136,24 @@ document.addEventListener('DOMContentLoaded', function() {
         messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
 
         if (typeof content === 'string') {
+            // Handle string content (error messages, etc)
             messageDiv.textContent = content;
         } else if (content.alternatives) {
-            console.log('Received alternatives:', content.alternatives);
+            // Handle response with alternatives
+            console.log('Received response with alternatives:', content);
             messageDiv.innerHTML = `<div class="response-options">
                 <h6 class="mb-3">Here are some tailored recommendations:</h6>
             </div>`;
+
+            // Iterate through alternatives and create response options
             content.alternatives.forEach(option => {
                 const optionElement = createResponseOption(option, messageInput.value);
                 messageDiv.querySelector('.response-options').appendChild(optionElement);
             });
+        } else {
+            // Handle unexpected content format
+            console.error('Unexpected content format:', content);
+            messageDiv.textContent = 'Error: Unexpected response format';
         }
 
         chatMessages.appendChild(messageDiv);
@@ -222,7 +230,8 @@ document.addEventListener('DOMContentLoaded', function() {
             loadingMessage.remove();
 
             if (data.status === 'success') {
-                addMessage(data.response);
+                // Pass the entire response object to addMessage
+                addMessage(data);
                 disableSubmit(5); // 5 second cooldown between requests
             } else {
                 handleError({ status: response.status }, loadingMessage);

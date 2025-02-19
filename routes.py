@@ -77,8 +77,9 @@ def register_routes(app):
             # Generate responses using OpenAI
             logger.debug("Generating travel plan responses")
             response = generate_travel_plan(message, preferences)
-            logger.debug(f"Generated response with {len(response.get('alternatives', []))} alternatives")
+            logger.debug(f"Generated response: {response}")
 
+            # Return the entire response object
             return jsonify(response)
 
         except Exception as e:
