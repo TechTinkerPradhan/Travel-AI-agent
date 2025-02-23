@@ -16,16 +16,12 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Get domain from environment variables
-        self.replit_dev_domain = os.environ.get('REPLIT_DEV_DOMAIN')
-        if not self.replit_dev_domain:
-            logger.error("REPLIT_DEV_DOMAIN is not set")
-            raise ValueError("REPLIT_DEV_DOMAIN environment variable is required")
-
+        # Get production domain for OAuth configuration
+        self.production_domain = "ai-travel-buddy-bboyswagat.replit.app"
         logger.debug(f"Calendar Service initialized with:")
         logger.debug(f"- Client ID exists: {bool(self.client_id)}")
         logger.debug(f"- Client Secret exists: {bool(self.client_secret)}")
-        logger.debug(f"- Using domain: {self.replit_dev_domain}")
+        logger.debug(f"- Using production domain: {self.production_domain}")
 
         if not all([self.client_id, self.client_secret]):
             error_msg = "Missing required Google OAuth configuration: "
@@ -40,7 +36,7 @@ class CalendarService:
         try:
             logger.debug("Starting Google Calendar authorization URL generation")
 
-            # Create the flow instance with dev domain format
+            # Create the flow instance
             client_config = {
                 "web": {
                     "client_id": self.client_id,
@@ -48,11 +44,10 @@ class CalendarService:
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "redirect_uris": [
-                        f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
+                        f"https://{self.production_domain}/api/calendar/oauth2callback"
                     ]
                 }
             }
-
             logger.debug(f"Client config (excluding secrets): {{'web': {{'redirect_uris': {client_config['web']['redirect_uris']}}}}}")
 
             flow = Flow.from_client_config(
@@ -60,21 +55,17 @@ class CalendarService:
                 scopes=self.SCOPES
             )
 
-            # Set the redirect URI with explicit HTTPS
-            redirect_uri = f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
+            # Set the redirect URI
+            redirect_uri = f"https://{self.production_domain}/api/calendar/oauth2callback"
             logger.debug(f"Setting redirect URI: {redirect_uri}")
             flow.redirect_uri = redirect_uri
 
-            # Generate authorization URL with offline access for refresh token
+            # Generate authorization URL
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
                 prompt='consent'  # Force consent screen to always appear
             )
-
-            # Ensure the authorization URL uses HTTPS
-            if authorization_url.startswith('http://'):
-                authorization_url = 'https://' + authorization_url[7:]
 
             logger.debug(f"Generated authorization URL: {authorization_url}")
             logger.debug(f"Generated state: {state}")
@@ -99,23 +90,17 @@ class CalendarService:
                         "client_secret": self.client_secret,
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"]
+                        "redirect_uris": [f"https://{self.production_domain}/api/calendar/oauth2callback"]
                     }
                 },
                 scopes=self.SCOPES,
                 state=session_state
             )
 
-            # Always use HTTPS for the redirect URI
-            flow.redirect_uri = f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
-
-            # Ensure the authorization response uses HTTPS
-            authorization_response = request_url
-            if authorization_response.startswith('http://'):
-                authorization_response = 'https://' + authorization_response[7:]
+            flow.redirect_uri = f"https://{self.production_domain}/api/calendar/oauth2callback"
 
             logger.debug("Fetching token from authorization response")
-            flow.fetch_token(authorization_response=authorization_response)
+            flow.fetch_token(authorization_response=request_url)
 
             credentials = flow.credentials
             logger.debug("Successfully obtained credentials")
