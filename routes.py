@@ -347,3 +347,13 @@ def register_routes(app):
                 'status': 'error',
                 'message': 'Failed to logout from Google Calendar'
             }), 500
+
+    @app.route('/api/calendar/oauth2callback/test', methods=['GET'])
+    def test_oauth_callback():
+        """Test endpoint to verify OAuth callback URL is accessible"""
+        logger.debug("OAuth callback test endpoint accessed")
+        return jsonify({
+            'status': 'success',
+            'message': 'OAuth callback URL is accessible',
+            'timestamp': datetime.now().isoformat()
+        })
