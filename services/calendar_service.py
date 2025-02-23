@@ -16,20 +16,16 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Get domain from environment, preferring REPLIT_DEV_DOMAIN
-        self.replit_domain = os.environ.get('REPLIT_DEV_DOMAIN')
-        if not self.replit_domain:
-            replit_slug = os.environ.get('REPLIT_SLUG')
-            repl_id = os.environ.get('REPL_ID')
-            if replit_slug and repl_id:
-                self.replit_domain = f"{replit_slug}.{repl_id}.repl.co"
-            else:
-                self.replit_domain = '0.0.0.0:5000'
+        # Get domain from environment variables
+        self.replit_dev_domain = os.environ.get('REPLIT_DEV_DOMAIN')
+        if not self.replit_dev_domain:
+            logger.error("REPLIT_DEV_DOMAIN is not set")
+            raise ValueError("REPLIT_DEV_DOMAIN environment variable is required")
 
         logger.debug(f"Calendar Service initialized with:")
         logger.debug(f"- Client ID exists: {bool(self.client_id)}")
         logger.debug(f"- Client Secret exists: {bool(self.client_secret)}")
-        logger.debug(f"- Replit domain: {self.replit_domain}")
+        logger.debug(f"- Using domain: {self.replit_dev_domain}")
 
         if not all([self.client_id, self.client_secret]):
             error_msg = "Missing required Google OAuth configuration: "
@@ -43,20 +39,20 @@ class CalendarService:
         """Generate the authorization URL for Google OAuth2"""
         try:
             logger.debug("Starting Google Calendar authorization URL generation")
-            logger.debug(f"Client ID exists: {bool(self.client_id)}")
-            logger.debug(f"Client Secret exists: {bool(self.client_secret)}")
-            logger.debug(f"Using Replit domain: {self.replit_domain}")
 
-            # Create the flow instance
+            # Create the flow instance with dev domain format
             client_config = {
                 "web": {
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
+                    "redirect_uris": [
+                        f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
+                    ]
                 }
             }
+
             logger.debug(f"Client config (excluding secrets): {{'web': {{'redirect_uris': {client_config['web']['redirect_uris']}}}}}")
 
             flow = Flow.from_client_config(
@@ -65,7 +61,7 @@ class CalendarService:
             )
 
             # Set the redirect URI with explicit HTTPS
-            redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+            redirect_uri = f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
             logger.debug(f"Setting redirect URI: {redirect_uri}")
             flow.redirect_uri = redirect_uri
 
@@ -103,7 +99,7 @@ class CalendarService:
                         "client_secret": self.client_secret,
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                         "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
+                        "redirect_uris": [f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"]
                     }
                 },
                 scopes=self.SCOPES,
@@ -111,7 +107,7 @@ class CalendarService:
             )
 
             # Always use HTTPS for the redirect URI
-            flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+            flow.redirect_uri = f"https://{self.replit_dev_domain}/api/calendar/oauth2callback"
 
             # Ensure the authorization response uses HTTPS
             authorization_response = request_url
