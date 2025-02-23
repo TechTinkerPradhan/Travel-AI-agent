@@ -44,15 +44,19 @@ def generate_travel_plan(message, user_preferences):
                 system_prompt = f"""{agent.system_prompt}
                 Additionally, provide your response in a well-formatted structure with:
                 - Clear headings using markdown (##)
-                - Bullet points for lists
-                - Emphasis on key points using bold text
-                - Short paragraphs for readability"""
+                - Each day's activities clearly marked with '## Day X: [Title]'
+                - Time-specific activities in 24-hour format (e.g., 09:00)
+                - Location information in bold text
+                - Duration estimates in parentheses
+                - Bullet points for individual activities
+                """
 
                 full_prompt = f"""User preferences: {preferences_context}
                 User message: {message}
 
                 Provide a unique travel recommendation as a {agent.role.value} specialist.
                 Focus on a different aspect or approach than any previous response.
+                Structure each day's activities with specific times and durations.
                 Consider:
                 1. User's specific request and preferences
                 2. Your specialized domain knowledge
@@ -83,7 +87,8 @@ def generate_travel_plan(message, user_preferences):
                 "alternatives": [
                     {
                         "id": f"option_{i+1}",
-                        "content": response
+                        "content": response,
+                        "type": "itinerary"  # Mark as itinerary for frontend processing
                     }
                     for i, response in enumerate(responses)
                 ]

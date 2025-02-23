@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from flask import jsonify, request, render_template, redirect, session, url_for
 from services.openai_service import generate_travel_plan
 from services.airtable_service import AirtableService
@@ -243,7 +244,7 @@ def register_routes(app):
 
     @app.route('/api/calendar/event', methods=['POST'])
     def create_calendar_event():
-        """Create a new calendar event"""
+        """Create calendar events from itinerary"""
         try:
             logger.debug("Received calendar event creation request")
             if 'google_credentials' not in session:
@@ -261,21 +262,31 @@ def register_routes(app):
                     'message': 'No event data provided'
                 }), 400
 
-            event_id = calendar_service.create_event(
+            # Get the itinerary content and start date
+            itinerary_content = data.get('itinerary_content')
+            start_date = data.get('start_date')
+
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+            # Create the calendar events
+            event_ids = calendar_service.create_calendar_events(
                 session['google_credentials'],
-                data
+                itinerary_content,
+                start_date
             )
-            logger.debug(f"Calendar event created with ID: {event_id}")
+
+            logger.debug(f"Created {len(event_ids)} calendar events")
             return jsonify({
                 'status': 'success',
-                'event_id': event_id
+                'event_ids': event_ids
             })
 
         except Exception as e:
-            logger.error(f"Error creating calendar event: {str(e)}", exc_info=True)
+            logger.error(f"Error creating calendar events: {str(e)}", exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to create calendar event: {str(e)}'
+                'message': f'Failed to create calendar events: {str(e)}'
             }), 500
 
     @app.route('/api/calendar/status')

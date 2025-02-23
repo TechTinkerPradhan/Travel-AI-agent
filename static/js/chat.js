@@ -31,6 +31,78 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function createCalendarEventsFromItinerary(content) {
+        // Create a dialog to select start date
+        const dialog = document.createElement('div');
+        dialog.className = 'modal fade';
+        dialog.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Schedule Itinerary</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="scheduleForm">
+                            <div class="mb-3">
+                                <label for="startDate" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="startDate" required
+                                       min="${new Date().toISOString().split('T')[0]}">
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="confirmSchedule">Schedule</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+        const modal = new bootstrap.Modal(dialog);
+        modal.show();
+
+        // Handle form submission
+        document.getElementById('confirmSchedule').addEventListener('click', async () => {
+            const startDate = document.getElementById('startDate').value;
+            if (!startDate) {
+                alert('Please select a start date');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/calendar/event', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        itinerary_content: content,
+                        start_date: startDate
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    addMessage('Successfully added itinerary to your Google Calendar!');
+                    modal.hide();
+                    dialog.remove();
+                } else {
+                    addMessage('Failed to add itinerary to calendar: ' + data.message, false, true);
+                }
+            } catch (error) {
+                console.error('Error creating calendar events:', error);
+                addMessage('Error scheduling itinerary: ' + error.message, false, true);
+            }
+        });
+
+        // Clean up when dialog is closed
+        dialog.addEventListener('hidden.bs.modal', () => {
+            dialog.remove();
+        });
+    }
+
     function createResponseOption(optionData, query) {
         console.log('Creating response option:', optionData);
         const optionDiv = document.createElement('div');
@@ -48,27 +120,14 @@ document.addEventListener('DOMContentLoaded', function() {
         selectButton.className = 'btn btn-sm btn-outline-primary mt-2 select-response-btn';
         selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
 
-        // Add calendar button if the response contains itinerary-related content
-        const content = optionData.content.toLowerCase();
-        if (content.includes('itinerary') || content.includes('schedule')) {
+        // Add calendar button if this is an itinerary
+        if (optionData.type === 'itinerary') {
             const calendarButton = document.createElement('button');
             calendarButton.className = 'btn btn-sm btn-outline-secondary mt-2 ms-2';
             calendarButton.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
 
-            calendarButton.addEventListener('click', async () => {
-                const eventDetails = {
-                    summary: 'Travel Itinerary',
-                    description: optionData.content,
-                    start: {
-                        dateTime: new Date().toISOString(),
-                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                    },
-                    end: {
-                        dateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-                    }
-                };
-                await createCalendarEvent(eventDetails);
+            calendarButton.addEventListener('click', () => {
+                createCalendarEventsFromItinerary(optionData.content);
             });
 
             const buttonGroup = document.createElement('div');
