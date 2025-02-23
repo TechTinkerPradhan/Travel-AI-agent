@@ -16,13 +16,15 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Get domain from environment
-        replit_slug = os.environ.get('REPLIT_SLUG')
-        replit_id = os.environ.get('REPL_ID')
-        if replit_slug and replit_id:
-            self.replit_domain = f"{replit_slug}.{replit_id}.repl.co"
-        else:
-            self.replit_domain = '0.0.0.0:5000'
+        # Get domain from environment, preferring REPLIT_DEV_DOMAIN
+        self.replit_domain = os.environ.get('REPLIT_DEV_DOMAIN')
+        if not self.replit_domain:
+            replit_slug = os.environ.get('REPLIT_SLUG')
+            repl_id = os.environ.get('REPL_ID')
+            if replit_slug and repl_id:
+                self.replit_domain = f"{replit_slug}.{repl_id}.repl.co"
+            else:
+                self.replit_domain = '0.0.0.0:5000'
 
         logger.debug(f"Calendar Service initialized with:")
         logger.debug(f"- Client ID exists: {bool(self.client_id)}")
