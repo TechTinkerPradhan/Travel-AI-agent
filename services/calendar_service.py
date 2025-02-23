@@ -38,9 +38,9 @@ class CalendarService:
         try:
             logger.debug(f"Generating authorization URL with domain: {self.replit_domain}")
 
-            # Create the flow using the client secrets
+            # Create the flow instance
             flow = Flow.from_client_config(
-                {
+                client_config={
                     "web": {
                         "client_id": self.client_id,
                         "client_secret": self.client_secret,
@@ -52,14 +52,15 @@ class CalendarService:
                 scopes=self.SCOPES
             )
 
-            # Set the redirect URI to use HTTPS
+            # Set the redirect URI
             flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
             logger.debug(f"Set redirect URI to: {flow.redirect_uri}")
 
-            # Generate the authorization URL
+            # Generate authorization URL with offline access for refresh token
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
-                include_granted_scopes='true'
+                include_granted_scopes='true',
+                prompt='consent'  # Force consent screen to always appear
             )
 
             logger.debug(f"Generated authorization URL: {authorization_url}")
@@ -202,42 +203,6 @@ class CalendarService:
 
         except Exception as e:
             logger.error(f"Error creating calendar events: {str(e)}", exc_info=True)
-            raise
-
-    def get_authorization_url(self):
-        """Generate the authorization URL for Google OAuth2"""
-        try:
-            logger.debug(f"Generating authorization URL with domain: {self.replit_domain}")
-
-            # Create the flow using the client secrets
-            flow = Flow.from_client_config(
-                {
-                    "web": {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
-                    }
-                },
-                scopes=self.SCOPES
-            )
-
-            # Set the redirect URI to use HTTPS
-            flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
-            logger.debug(f"Set redirect URI to: {flow.redirect_uri}")
-
-            # Generate the authorization URL
-            authorization_url, state = flow.authorization_url(
-                access_type='offline',
-                include_granted_scopes='true'
-            )
-
-            logger.debug(f"Generated authorization URL: {authorization_url}")
-            return authorization_url, state
-
-        except Exception as e:
-            logger.error(f"Error generating authorization URL: {str(e)}", exc_info=True)
             raise
 
     def create_event(self, credentials_dict, event_details):

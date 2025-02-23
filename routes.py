@@ -197,13 +197,13 @@ def register_routes(app):
             logger.error(f"Configuration error: {str(ve)}", exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': f'Google Calendar configuration error: {str(ve)}'
+                'message': 'Google Calendar is not properly configured. Please try again later.'
             }), 500
         except Exception as e:
             logger.error(f"Error initiating OAuth flow: {str(e)}", exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to initiate Google Calendar authorization'
+                'message': 'Failed to initiate Google Calendar authorization. Please try again.'
             }), 500
 
     @app.route('/api/calendar/oauth2callback')
@@ -214,7 +214,22 @@ def register_routes(app):
             logger.debug(f"Request URL: {request.url}")
             logger.debug(f"Session state: {session.get('oauth_state')}")
 
+            if 'error' in request.args:
+                error = request.args.get('error')
+                logger.error(f"OAuth error: {error}")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to authenticate with Google Calendar.'
+                }), 400
+
             state = session.get('oauth_state')
+            if not state:
+                logger.error("No OAuth state found in session")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Invalid authentication state. Please try again.'
+                }), 400
+
             flow = Flow.from_client_config(
                 {
                     "web": {
@@ -230,12 +245,12 @@ def register_routes(app):
             )
 
             flow.redirect_uri = f"https://{calendar_service.replit_domain}/api/calendar/oauth2callback"
-            authorization_response = request.url
+            authorization_response = request.url.replace('http://', 'https://')
             logger.debug(f"Authorization response URL: {authorization_response}")
 
             flow.fetch_token(authorization_response=authorization_response)
-
             credentials = flow.credentials
+
             session['google_credentials'] = {
                 'token': credentials.token,
                 'refresh_token': credentials.refresh_token,
@@ -244,6 +259,7 @@ def register_routes(app):
                 'client_secret': credentials.client_secret,
                 'scopes': credentials.scopes
             }
+
             logger.debug("Google Calendar authentication successful")
             return redirect(url_for('index'))
 
@@ -251,7 +267,7 @@ def register_routes(app):
             logger.error(f"Error in OAuth callback: {str(e)}", exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to complete Google Calendar authorization'
+                'message': 'Failed to complete Google Calendar authorization. Please try again.'
             }), 500
 
     @app.route('/api/calendar/event', methods=['POST'])

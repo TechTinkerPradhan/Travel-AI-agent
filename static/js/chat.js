@@ -126,8 +126,32 @@ document.addEventListener('DOMContentLoaded', function() {
             calendarButton.className = 'btn btn-sm btn-outline-secondary mt-2 ms-2';
             calendarButton.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
 
-            calendarButton.addEventListener('click', () => {
-                createCalendarEventsFromItinerary(optionData.content);
+            calendarButton.addEventListener('click', async () => {
+                // Show loading state
+                calendarButton.disabled = true;
+                calendarButton.innerHTML = '<i data-feather="loader"></i> Connecting...';
+                feather.replace();
+
+                try {
+                    // Check calendar auth status first
+                    const statusResponse = await fetch('/api/calendar/status');
+                    const statusData = await statusResponse.json();
+
+                    if (!statusData.authenticated) {
+                        // Redirect to Google auth
+                        window.location.href = '/api/calendar/auth';
+                    } else {
+                        createCalendarEventsFromItinerary(optionData.content);
+                    }
+                } catch (error) {
+                    console.error('Error checking calendar status:', error);
+                    addMessage('Failed to connect to Google Calendar. Please try again.', false, true);
+
+                    // Reset button state
+                    calendarButton.disabled = false;
+                    calendarButton.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+                    feather.replace();
+                }
             });
 
             const buttonGroup = document.createElement('div');
