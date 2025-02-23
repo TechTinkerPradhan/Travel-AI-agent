@@ -169,12 +169,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     selectButton.innerHTML = '<i data-feather="check-circle"></i> Selected';
                     feather.replace();
 
+                    // Add friendly confirmation message
+                    const confirmationMessage = document.createElement('div');
+                    confirmationMessage.className = 'message system mt-3';
+                    confirmationMessage.innerHTML = `
+                        <div class="confirmation-banner">
+                            <i data-feather="check-circle" class="text-success"></i>
+                            <h5 class="mb-2">Excellent choice! 🎉</h5>
+                            <p class="mb-2">I'm excited to help you with this wonderful itinerary! Would you like me to add these plans to your Google Calendar? Just click the "Add to Calendar" button, and I'll take care of scheduling everything for you.</p>
+                            <p class="mb-0">Feel free to ask me any questions about the itinerary or if you'd like to make any adjustments to better suit your preferences!</p>
+                        </div>
+                    `;
+                    chatMessages.appendChild(confirmationMessage);
+                    feather.replace();
+
                     // Add preference analysis if available
                     if (data.preference_analysis) {
                         const analysisDiv = document.createElement('div');
                         analysisDiv.className = 'message system preference-analysis mt-2';
                         analysisDiv.innerHTML = `
-                            <small class="text-muted">Preferences identified:</small>
+                            <small class="text-muted">Your travel preferences:</small>
                             <pre>${JSON.stringify(JSON.parse(data.preference_analysis), null, 2)}</pre>
                         `;
                         chatMessages.appendChild(analysisDiv);

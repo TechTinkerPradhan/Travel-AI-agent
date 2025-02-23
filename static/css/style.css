@@ -97,3 +97,29 @@
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+.confirmation-banner {
+    background-color: var(--bs-dark-bg-subtle);
+    border: 1px solid var(--bs-success);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.confirmation-banner i {
+    width: 2rem;
+    height: 2rem;
+    color: var(--bs-success);
+    margin-bottom: 1rem;
+}
+
+.confirmation-banner h5 {
+    color: var(--bs-success);
+    font-weight: 600;
+}
+
+.confirmation-banner p {
+    color: var(--bs-body-color);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
