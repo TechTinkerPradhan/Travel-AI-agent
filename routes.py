@@ -52,8 +52,8 @@ def register_routes(app):
                     'message': 'No data provided'
                 }), 400
 
-            message = data.get('message', '')
-            if not message.strip():
+            message = data.get('message', '').strip()
+            if not message:
                 logger.error("Empty message provided")
                 return jsonify({
                     'status': 'error',
@@ -77,24 +77,43 @@ def register_routes(app):
                 preferences = {}
 
             # Generate responses using OpenAI
-            logger.debug("Generating travel plan responses")
-            response = generate_travel_plan(message, preferences)
-            logger.debug(f"Generated response: {response}")
+            try:
+                logger.debug("Generating travel plan responses")
+                response = generate_travel_plan(message, preferences)
+                logger.debug(f"Generated response: {response}")
+                return jsonify(response)
 
-            # Return the entire response object
-            return jsonify(response)
+            except Exception as e:
+                error_message = str(e)
+                logger.error(f"Error generating response: {error_message}", exc_info=True)
+
+                if "OPENAI_API_KEY" in error_message:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'The service is not properly configured. Please contact support.'
+                    }), 500
+                elif "high traffic" in error_message.lower():
+                    return jsonify({
+                        'status': 'error',
+                        'message': error_message
+                    }), 429
+                elif "api error" in error_message.lower():
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'The AI service is currently unavailable. Please try again later.'
+                    }), 503
+                else:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'An unexpected error occurred: {error_message}'
+                    }), 500
 
         except Exception as e:
             error_message = str(e)
-            logger.error(f"Error in chat endpoint: {error_message}", exc_info=True)
-            if "high traffic" in error_message.lower():
-                return jsonify({
-                    'status': 'error',
-                    'message': error_message
-                }), 429
+            logger.error(f"Unexpected error in chat endpoint: {error_message}", exc_info=True)
             return jsonify({
                 'status': 'error',
-                'message': f'An error occurred: {error_message}'
+                'message': 'An internal server error occurred. Please try again.'
             }), 500
 
     @app.route('/api/chat/select', methods=['POST'])

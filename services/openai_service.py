@@ -2,14 +2,20 @@ import os
 import time
 import random
 import logging
-from openai import OpenAI, RateLimitError
+import json
+from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 from services.ai_agents import AgentRegistry, AgentRole
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your-api-key")
+# Initialize OpenAI client
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    logger.error("OPENAI_API_KEY is not set")
+    raise ValueError("OPENAI_API_KEY environment variable is required")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
 
@@ -22,6 +28,10 @@ def generate_travel_plan(message, user_preferences):
 
     for attempt in range(max_retries):
         try:
+            logger.debug("Starting travel plan generation")
+            logger.debug(f"Message: {message}")
+            logger.debug(f"User preferences: {user_preferences}")
+
             # Get the most appropriate agent for the query
             agent = agent_registry.get_best_agent_for_query(message)
             logger.debug(f"Selected agent role: {agent.role.value}")
@@ -38,7 +48,7 @@ def generate_travel_plan(message, user_preferences):
             # Generate two alternative responses with slightly different temperatures
             responses = []
             for temp_adjustment in [-0.1, 0.1]:
-                adjusted_temp = agent.temperature + temp_adjustment
+                adjusted_temp = max(0.1, min(1.0, agent.temperature + temp_adjustment))
                 logger.debug(f"Generating response with temperature: {adjusted_temp}")
 
                 system_prompt = f"""{agent.system_prompt}
@@ -65,20 +75,28 @@ def generate_travel_plan(message, user_preferences):
                 """
 
                 logger.debug(f"Making OpenAI API call for response {len(responses) + 1}")
-                response = client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": full_prompt}
-                    ],
-                    max_tokens=2000,
-                    temperature=adjusted_temp
-                )
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-4",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": full_prompt}
+                        ],
+                        max_tokens=2000,
+                        temperature=adjusted_temp
+                    )
 
-                content = response.choices[0].message.content
-                logger.debug(f"Received response {len(responses) + 1} (length: {len(content)})")
-                logger.debug(f"Response content preview: {content[:200]}...")
-                responses.append(content)
+                    content = response.choices[0].message.content
+                    logger.debug(f"Received response {len(responses) + 1} (length: {len(content)})")
+                    logger.debug(f"Response content preview: {content[:200]}...")
+                    responses.append(content)
+
+                except APIError as api_error:
+                    logger.error(f"OpenAI API error: {str(api_error)}")
+                    raise Exception(f"OpenAI API error: {str(api_error)}")
+                except APIConnectionError as conn_error:
+                    logger.error(f"OpenAI API connection error: {str(conn_error)}")
+                    raise Exception("Unable to connect to OpenAI API. Please try again later.")
 
             # Format the responses for presentation
             formatted_response = {
