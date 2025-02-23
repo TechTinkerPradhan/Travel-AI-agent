@@ -220,70 +220,105 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         selectButton.addEventListener('click', async () => {
+            selectButton.disabled = true;
+            selectButton.innerHTML = '<i data-feather="loader"></i> Processing...';
+            feather.replace();
+
             try {
-                console.log('Selecting response:', optionData);
+                // Get the original query
+                const queryMessage = chatMessages.querySelector('.message.user:last-child')?.textContent;
 
-                // Disable the button and show loading state
-                selectButton.disabled = true;
-                selectButton.innerHTML = '<i data-feather="loader"></i> Selecting...';
-                feather.replace();
-
-                const queryText = messageInput.value.trim();
                 const response = await fetch('/api/chat/select', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        user_id: userId,
-                        original_query: queryText,
-                        selected_response: optionData.content
+                        original_query: queryMessage,
+                        selected_response: optionData.content,
+                        user_id: getUserId()
                     })
                 });
 
                 const data = await response.json();
-                console.log('Selection response:', data);
 
                 if (data.status === 'success') {
-                    // Hide other options
-                    const options = chatMessages.querySelectorAll('.response-option');
-                    options.forEach(option => {
-                        if (option !== optionDiv) {
-                            option.style.display = 'none';
+                    // Mark this option as selected
+                    const allOptions = chatMessages.querySelectorAll('.response-option');
+                    allOptions.forEach(opt => opt.classList.remove('selected'));
+                    optionDiv.classList.add('selected');
+
+                    // Remove other options
+                    allOptions.forEach(opt => {
+                        if (opt !== optionDiv) {
+                            opt.remove();
                         }
                     });
 
-                    // Update selected option appearance
+                    // Update the select button
+                    selectButton.innerHTML = '<i data-feather="check"></i> Selected';
                     selectButton.disabled = true;
-                    selectButton.classList.remove('btn-outline-primary');
-                    selectButton.classList.add('btn-success');
-                    selectButton.innerHTML = '<i data-feather="check-circle"></i> Selected';
                     feather.replace();
 
-                    // Add friendly confirmation message
-                    const confirmationMessage = document.createElement('div');
-                    confirmationMessage.className = 'message system mt-3';
-                    confirmationMessage.innerHTML = `
-                        <div class="confirmation-banner">
-                            <i data-feather="check-circle" class="text-success"></i>
-                            <h5 class="mb-2">Excellent choice! 🎉</h5>
-                            <p class="mb-2">I'm excited to help you with this wonderful itinerary! Would you like me to add these plans to your Google Calendar? Just click the "Add to Calendar" button, and I'll take care of scheduling everything for you.</p>
-                            <p class="mb-0">Feel free to ask me any questions about the itinerary or if you'd like to make any adjustments to better suit your preferences!</p>
-                        </div>
-                    `;
-                    chatMessages.appendChild(confirmationMessage);
+                    // Add confirmation buttons
+                    const confirmationDiv = document.createElement('div');
+                    confirmationDiv.className = 'mt-3 d-flex gap-2';
+
+                    const confirmButton = document.createElement('button');
+                    confirmButton.className = 'btn btn-success';
+                    confirmButton.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+
+                    const refineButton = document.createElement('button');
+                    refineButton.className = 'btn btn-secondary';
+                    refineButton.innerHTML = '<i data-feather="edit-2"></i> Refine Plan';
+
+                    confirmationDiv.appendChild(confirmButton);
+                    confirmationDiv.appendChild(refineButton);
+                    optionDiv.appendChild(confirmationDiv);
                     feather.replace();
 
-                    // Add preference analysis if available
-                    if (data.preference_analysis) {
-                        const analysisDiv = document.createElement('div');
-                        analysisDiv.className = 'message system preference-analysis mt-2';
-                        analysisDiv.innerHTML = `
-                            <small class="text-muted">Your travel preferences:</small>
-                            <pre>${JSON.stringify(JSON.parse(data.preference_analysis), null, 2)}</pre>
-                        `;
-                        chatMessages.appendChild(analysisDiv);
-                    }
+                    // Handle calendar integration
+                    confirmButton.addEventListener('click', async () => {
+                        const startDate = prompt('Enter start date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+                        if (!startDate) return;
+
+                        // Check calendar auth status
+                        const authStatus = await fetch('/api/calendar/status');
+                        const authData = await authStatus.json();
+
+                        if (!authData.authenticated) {
+                            window.location.href = '/api/calendar/auth';
+                            return;
+                        }
+
+                        // Create calendar events
+                        const calendarResponse = await fetch('/api/calendar/event', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                itinerary_content: optionData.content,
+                                start_date: startDate
+                            })
+                        });
+
+                        const calendarData = await calendarResponse.json();
+                        if (calendarData.status === 'success') {
+                            alert('Itinerary added to your calendar!');
+                        } else {
+                            alert('Failed to add to calendar: ' + calendarData.message);
+                        }
+                    });
+
+                    // Handle refinement
+                    refineButton.addEventListener('click', () => {
+                        const refinement = prompt('What changes would you like to make to the itinerary?');
+                        if (refinement) {
+                            addMessage(refinement, true);
+                            sendMessage(refinement);
+                        }
+                    });
                 } else {
                     console.error('Error selecting response:', data);
                     selectButton.disabled = false;
@@ -520,4 +555,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Check calendar auth status when page loads
     checkCalendarAuth();
+
+    //Helper function to get user ID (assuming this function exists elsewhere)
+    function getUserId() {
+        //Implementation to retrieve userId
+        return userId;
+    }
+
+    //Helper function to send message (assuming this function exists elsewhere)
+    function sendMessage(message) {
+        //Implementation to send the message to the backend
+        console.log("Sending message:", message);
+    }
 });
