@@ -235,7 +235,22 @@ def register_routes(app):
             # Check for OAuth errors
             if 'error' in request.args:
                 error = request.args.get('error')
-                logger.error(f"OAuth error received: {error}")
+                error_description = request.args.get('error_description', '')
+                logger.error(f"OAuth error received: {error} - {error_description}")
+
+                if error == 'access_denied':
+                    if 'verification' in error_description.lower():
+                        return jsonify({
+                            'status': 'error',
+                            'message': 'This application is pending verification by Google. Please try again later. ' +
+                                     'During the development phase, you can still test the application by using a Google account ' +
+                                     'that is added as a test user in the Google Cloud Console.'
+                        }), 403
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Access was denied to Google Calendar. Please try again and make sure to grant the required permissions.'
+                    }), 403
+
                 return jsonify({
                     'status': 'error',
                     'message': f'Failed to authenticate with Google Calendar: {error}'

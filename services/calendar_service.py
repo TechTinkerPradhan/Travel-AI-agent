@@ -79,7 +79,7 @@ class CalendarService:
             logger.debug(f"Request URL: {request_url}")
             logger.debug(f"Session state: {session_state}")
 
-            # Create flow instance for verification
+            # Create client config
             client_config = {
                 "web": {
                     "client_id": self.client_id,
@@ -99,10 +99,16 @@ class CalendarService:
             flow.redirect_uri = self.redirect_uri
 
             logger.debug("Fetching token from authorization response")
-            flow.fetch_token(authorization_response=request_url)
+            try:
+                flow.fetch_token(authorization_response=request_url)
+                logger.debug("Successfully obtained token")
+            except Exception as token_error:
+                logger.error(f"Error fetching token: {str(token_error)}", exc_info=True)
+                raise ValueError("Failed to obtain access token. The application may need to be verified by Google.")
 
             credentials = flow.credentials
             logger.debug("Successfully obtained credentials")
+            logger.debug(f"Credentials contain refresh token: {bool(credentials.refresh_token)}")
 
             return {
                 'token': credentials.token,
