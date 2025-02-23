@@ -32,28 +32,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function createCalendarEventsFromItinerary(content) {
-        // Create a dialog to select start date
+        // Create a dialog to select start date and preview events
         const dialog = document.createElement('div');
         dialog.className = 'modal fade';
         dialog.innerHTML = `
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Schedule Itinerary</h5>
+                        <h5 class="modal-title">Schedule Itinerary Events</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <form id="scheduleForm">
                             <div class="mb-3">
-                                <label for="startDate" class="form-label">Start Date</label>
+                                <label for="startDate" class="form-label">Start Date for Itinerary</label>
                                 <input type="date" class="form-control" id="startDate" required
                                        min="${new Date().toISOString().split('T')[0]}">
+                            </div>
+                            <div id="eventsPreview" class="mt-4">
+                                <h6>Events Preview:</h6>
+                                <div class="events-list"></div>
                             </div>
                         </form>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="confirmSchedule">Schedule</button>
+                        <button type="button" class="btn btn-primary" id="confirmSchedule">
+                            <i data-feather="calendar"></i> Add to Calendar
+                        </button>
                     </div>
                 </div>
             </div>
@@ -62,6 +68,45 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.appendChild(dialog);
         const modal = new bootstrap.Modal(dialog);
         modal.show();
+
+        // Preview events when date is selected
+        document.getElementById('startDate').addEventListener('change', async (e) => {
+            const startDate = e.target.value;
+            try {
+                const response = await fetch('/api/calendar/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        itinerary_content: content,
+                        start_date: startDate
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Display events preview
+                    const eventsList = dialog.querySelector('.events-list');
+                    eventsList.innerHTML = data.preview.map(event => `
+                        <div class="card mb-2">
+                            <div class="card-body">
+                                <h6 class="card-title">${event.summary}</h6>
+                                <div class="text-muted">
+                                    <small>
+                                        <i data-feather="clock"></i> ${event.start_time} (${event.duration})
+                                        ${event.location ? `<br><i data-feather="map-pin"></i> ${event.location}` : ''}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                    feather.replace();
+                }
+            } catch (error) {
+                console.error('Error getting events preview:', error);
+            }
+        });
 
         // Handle form submission
         document.getElementById('confirmSchedule').addEventListener('click', async () => {
@@ -72,6 +117,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             try {
+                const confirmBtn = document.getElementById('confirmSchedule');
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<i data-feather="loader"></i> Adding to Calendar...';
+                feather.replace();
+
                 const response = await fetch('/api/calendar/event', {
                     method: 'POST',
                     headers: {
@@ -90,10 +140,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     dialog.remove();
                 } else {
                     addMessage('Failed to add itinerary to calendar: ' + data.message, false, true);
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+                    feather.replace();
                 }
             } catch (error) {
                 console.error('Error creating calendar events:', error);
                 addMessage('Error scheduling itinerary: ' + error.message, false, true);
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+                feather.replace();
             }
         });
 

@@ -243,8 +243,8 @@ def register_routes(app):
                         return jsonify({
                             'status': 'error',
                             'message': 'This application is pending verification by Google. Please try again later. ' +
-                                     'During the development phase, you can still test the application by using a Google account ' +
-                                     'that is added as a test user in the Google Cloud Console.'
+                                      'During the development phase, you can still test the application by using a Google account ' +
+                                      'that is added as a test user in the Google Cloud Console.'
                         }), 403
                     return jsonify({
                         'status': 'error',
@@ -372,3 +372,51 @@ def register_routes(app):
             'message': 'OAuth callback URL is accessible',
             'timestamp': datetime.now().isoformat()
         })
+
+    @app.route('/api/calendar/preview', methods=['POST'])
+    def preview_calendar_events():
+        """Preview calendar events from itinerary before creating them"""
+        try:
+            logger.debug("Received calendar event preview request")
+            data = request.json
+            if not data:
+                logger.error("No event data provided")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No event data provided'
+                }), 400
+
+            # Get the itinerary content and start date
+            itinerary_content = data.get('itinerary_content')
+            start_date = data.get('start_date')
+
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+            # Parse the itinerary without creating events
+            days = calendar_service.parse_itinerary(itinerary_content)
+
+            # Create preview data
+            preview = []
+            for day in days:
+                for activity in day['activities']:
+                    preview.append({
+                        'summary': f"Day {day['day_number']}: {activity['description']}",
+                        'location': activity['location'],
+                        'start_time': activity['time'],
+                        'duration': f"{activity['duration']} minutes",
+                        'day': day['day_number']
+                    })
+
+            logger.debug(f"Generated preview for {len(preview)} events")
+            return jsonify({
+                'status': 'success',
+                'preview': preview
+            })
+
+        except Exception as e:
+            logger.error(f"Error generating calendar events preview: {str(e)}", exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to generate events preview: {str(e)}'
+            }), 500
