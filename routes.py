@@ -190,6 +190,7 @@ def register_routes(app):
         try:
             logger.debug("Initiating Google Calendar OAuth flow")
             authorization_url, state = calendar_service.get_authorization_url()
+            logger.debug(f"Generated authorization URL: {authorization_url}")
             session['oauth_state'] = state
             return redirect(authorization_url)
         except Exception as e:
@@ -204,6 +205,9 @@ def register_routes(app):
         """Handle the OAuth2 callback from Google"""
         try:
             logger.debug("Handling Google Calendar OAuth callback")
+            logger.debug(f"Request URL: {request.url}")
+            logger.debug(f"Session state: {session.get('oauth_state')}")
+
             state = session.get('oauth_state')
             flow = Flow.from_client_config(
                 {
@@ -221,6 +225,8 @@ def register_routes(app):
 
             flow.redirect_uri = f"https://{calendar_service.replit_domain}/api/calendar/oauth2callback"
             authorization_response = request.url
+            logger.debug(f"Authorization response URL: {authorization_response}")
+
             flow.fetch_token(authorization_response=authorization_response)
 
             credentials = flow.credentials

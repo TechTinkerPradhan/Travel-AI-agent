@@ -155,6 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 const data = await response.json();
+                console.log('Selection response:', data); //Added log
                 if (data.status === 'success') {
                     // Hide other options
                     const options = chatMessages.querySelectorAll('.response-option');
@@ -193,6 +194,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         `;
                         chatMessages.appendChild(analysisDiv);
                     }
+                } else {
+                    console.error('Error selecting response:', data);
+                    addMessage('Error processing your selection. Please try again.', false, true);
                 }
             } catch (error) {
                 console.error('Error selecting response:', error);
