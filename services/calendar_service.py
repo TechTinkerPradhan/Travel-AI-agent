@@ -16,12 +16,13 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Get production domain for OAuth configuration
-        self.production_domain = "ai-travel-buddy-bboyswagat.replit.app"
+        # Define redirect URI directly
+        self.redirect_uri = "https://ai-travel-buddy-bboyswagat.replit.app/api/calendar/oauth2callback"
+
         logger.debug(f"Calendar Service initialized with:")
         logger.debug(f"- Client ID exists: {bool(self.client_id)}")
         logger.debug(f"- Client Secret exists: {bool(self.client_secret)}")
-        logger.debug(f"- Using production domain: {self.production_domain}")
+        logger.debug(f"- Redirect URI: {self.redirect_uri}")
 
         if not all([self.client_id, self.client_secret]):
             error_msg = "Missing required Google OAuth configuration: "
@@ -36,18 +37,17 @@ class CalendarService:
         try:
             logger.debug("Starting Google Calendar authorization URL generation")
 
-            # Create the flow instance
+            # Create client config
             client_config = {
                 "web": {
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [
-                        f"https://{self.production_domain}/api/calendar/oauth2callback"
-                    ]
+                    "redirect_uris": [self.redirect_uri]
                 }
             }
+
             logger.debug(f"Client config (excluding secrets): {{'web': {{'redirect_uris': {client_config['web']['redirect_uris']}}}}}")
 
             flow = Flow.from_client_config(
@@ -55,10 +55,7 @@ class CalendarService:
                 scopes=self.SCOPES
             )
 
-            # Set the redirect URI
-            redirect_uri = f"https://{self.production_domain}/api/calendar/oauth2callback"
-            logger.debug(f"Setting redirect URI: {redirect_uri}")
-            flow.redirect_uri = redirect_uri
+            flow.redirect_uri = self.redirect_uri
 
             # Generate authorization URL
             authorization_url, state = flow.authorization_url(
@@ -83,21 +80,23 @@ class CalendarService:
             logger.debug(f"Session state: {session_state}")
 
             # Create flow instance for verification
+            client_config = {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [self.redirect_uri]
+                }
+            }
+
             flow = Flow.from_client_config(
-                client_config={
-                    "web": {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{self.production_domain}/api/calendar/oauth2callback"]
-                    }
-                },
+                client_config=client_config,
                 scopes=self.SCOPES,
                 state=session_state
             )
 
-            flow.redirect_uri = f"https://{self.production_domain}/api/calendar/oauth2callback"
+            flow.redirect_uri = self.redirect_uri
 
             logger.debug("Fetching token from authorization response")
             flow.fetch_token(authorization_response=request_url)
