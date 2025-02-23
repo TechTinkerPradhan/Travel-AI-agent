@@ -16,13 +16,18 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Define redirect URI directly
-        self.redirect_uri = "https://ai-travel-buddy-bboyswagat.replit.app/api/calendar/oauth2callback"
+        # Get domain from environment
+        replit_slug = os.environ.get('REPLIT_SLUG')
+        repl_id = os.environ.get('REPL_ID')
+        if replit_slug and repl_id:
+            self.replit_domain = f"{replit_slug}.{repl_id}.repl.co"
+        else:
+            self.replit_domain = '0.0.0.0:5000'
 
         logger.debug(f"Calendar Service initialized with:")
         logger.debug(f"- Client ID exists: {bool(self.client_id)}")
         logger.debug(f"- Client Secret exists: {bool(self.client_secret)}")
-        logger.debug(f"- Redirect URI: {self.redirect_uri}")
+        logger.debug(f"- Replit domain: {self.replit_domain}")
 
         if not all([self.client_id, self.client_secret]):
             error_msg = "Missing required Google OAuth configuration: "
@@ -36,18 +41,20 @@ class CalendarService:
         """Generate the authorization URL for Google OAuth2"""
         try:
             logger.debug("Starting Google Calendar authorization URL generation")
+            logger.debug(f"Client ID exists: {bool(self.client_id)}")
+            logger.debug(f"Client Secret exists: {bool(self.client_secret)}")
+            logger.debug(f"Using Replit domain: {self.replit_domain}")
 
-            # Create client config
+            # Create the flow instance
             client_config = {
                 "web": {
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [self.redirect_uri]
+                    "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
                 }
             }
-
             logger.debug(f"Client config (excluding secrets): {{'web': {{'redirect_uris': {client_config['web']['redirect_uris']}}}}}")
 
             flow = Flow.from_client_config(
@@ -55,14 +62,21 @@ class CalendarService:
                 scopes=self.SCOPES
             )
 
-            flow.redirect_uri = self.redirect_uri
+            # Set the redirect URI with explicit HTTPS
+            redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+            logger.debug(f"Setting redirect URI: {redirect_uri}")
+            flow.redirect_uri = redirect_uri
 
-            # Generate authorization URL
+            # Generate authorization URL with offline access for refresh token
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
                 prompt='consent'  # Force consent screen to always appear
             )
+
+            # Ensure the authorization URL uses HTTPS
+            if authorization_url.startswith('http://'):
+                authorization_url = 'https://' + authorization_url[7:]
 
             logger.debug(f"Generated authorization URL: {authorization_url}")
             logger.debug(f"Generated state: {state}")
@@ -79,36 +93,34 @@ class CalendarService:
             logger.debug(f"Request URL: {request_url}")
             logger.debug(f"Session state: {session_state}")
 
-            # Create client config
-            client_config = {
-                "web": {
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [self.redirect_uri]
-                }
-            }
-
+            # Create flow instance for verification
             flow = Flow.from_client_config(
-                client_config=client_config,
+                client_config={
+                    "web": {
+                        "client_id": self.client_id,
+                        "client_secret": self.client_secret,
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
+                    }
+                },
                 scopes=self.SCOPES,
                 state=session_state
             )
 
-            flow.redirect_uri = self.redirect_uri
+            # Always use HTTPS for the redirect URI
+            flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+
+            # Ensure the authorization response uses HTTPS
+            authorization_response = request_url
+            if authorization_response.startswith('http://'):
+                authorization_response = 'https://' + authorization_response[7:]
 
             logger.debug("Fetching token from authorization response")
-            try:
-                flow.fetch_token(authorization_response=request_url)
-                logger.debug("Successfully obtained token")
-            except Exception as token_error:
-                logger.error(f"Error fetching token: {str(token_error)}", exc_info=True)
-                raise ValueError("Failed to obtain access token. The application may need to be verified by Google.")
+            flow.fetch_token(authorization_response=authorization_response)
 
             credentials = flow.credentials
             logger.debug("Successfully obtained credentials")
-            logger.debug(f"Credentials contain refresh token: {bool(credentials.refresh_token)}")
 
             return {
                 'token': credentials.token,
@@ -125,104 +137,90 @@ class CalendarService:
 
     def parse_itinerary(self, content):
         """Parse markdown itinerary into structured day events"""
-        try:
-            logger.debug("Parsing itinerary content")
-            days = []
-            current_day = None
-            current_activities = []
+        logger.debug("Parsing itinerary content")
+        days = []
+        current_day = None
+        current_activities = []
 
-            # Split content into lines
-            lines = content.split('\n')
+        # Split content into lines
+        lines = content.split('\n')
 
-            # Regular expressions for parsing
-            day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
-            time_pattern = r'(\d{1,2}:\d{2})'
+        # Regular expressions for parsing
+        day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
+        time_pattern = r'(\d{1,2}:\d{2})'
 
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
 
-                # Check for new day
-                day_match = re.search(day_pattern, line)
-                if day_match:
-                    # Save previous day if exists
-                    if current_day and current_activities:
-                        days.append({
-                            'day_number': current_day['number'],
-                            'title': current_day['title'],
-                            'activities': current_activities.copy()
-                        })
+            # Check for new day
+            day_match = re.search(day_pattern, line)
+            if day_match:
+                # Save previous day if exists
+                if current_day and current_activities:
+                    days.append({
+                        'day_number': current_day['number'],
+                        'title': current_day['title'],
+                        'activities': current_activities.copy()
+                    })
 
-                    # Start new day
-                    current_day = {
-                        'number': int(day_match.group(1)),
-                        'title': day_match.group(2).strip()
-                    }
-                    current_activities = []
-                    continue
+                # Start new day
+                current_day = {
+                    'number': int(day_match.group(1)),
+                    'title': day_match.group(2).strip()
+                }
+                current_activities = []
+                continue
 
-                # Look for activities with times
-                if current_day and line.startswith('-'):
-                    time_match = re.search(time_pattern, line)
-                    if time_match:
-                        time = time_match.group(1)
-                        activity = line[line.index('-')+1:].strip()
-                        if time_match.start() > 0:
-                            activity = line[line.index('-')+1:time_match.start()].strip()
+            # Look for activities with times
+            if current_day and line.startswith('-'):
+                time_match = re.search(time_pattern, line)
+                if time_match:
+                    time = time_match.group(1)
+                    activity = line[line.index('-')+1:].strip()
+                    if time_match.start() > 0:
+                        activity = line[line.index('-')+1:time_match.start()].strip()
 
-                        # Extract location if in bold
-                        location = None
-                        location_match = re.search(r'\*\*(.+?)\*\*', activity)
-                        if location_match:
-                            location = location_match.group(1)
-                            # Remove the location from activity description
-                            activity = activity.replace(f"**{location}**", location)
+                    # Extract location if in bold
+                    location = None
+                    location_match = re.search(r'\*\*(.+?)\*\*', activity)
+                    if location_match:
+                        location = location_match.group(1)
 
-                        # Extract duration if in parentheses
-                        duration = 60  # default duration in minutes
-                        duration_match = re.search(r'\((\d+)\s*(?:min|hour)s?\)', activity)
-                        if duration_match:
-                            duration_str = duration_match.group(1)
-                            if 'hour' in duration_match.group(0):
-                                duration = int(duration_str) * 60
-                            else:
-                                duration = int(duration_str)
-                            # Remove duration from activity description
-                            activity = activity.replace(duration_match.group(0), '').strip()
+                    # Extract duration if in parentheses
+                    duration = 60  # default duration in minutes
+                    duration_match = re.search(r'\((\d+)\s*(?:min|hour)s?\)', activity)
+                    if duration_match:
+                        duration_str = duration_match.group(1)
+                        if 'hour' in duration_match.group(0):
+                            duration = int(duration_str) * 60
+                        else:
+                            duration = int(duration_str)
 
-                        # Clean up any remaining parentheses and dots
-                        activity = re.sub(r'\s*\([^)]*\)', '', activity)
-                        activity = activity.rstrip('.')
+                    current_activities.append({
+                        'time': time,
+                        'description': activity,
+                        'location': location,
+                        'duration': duration
+                    })
 
-                        current_activities.append({
-                            'time': time,
-                            'description': activity,
-                            'location': location,
-                            'duration': duration
-                        })
+        # Add last day
+        if current_day and current_activities:
+            days.append({
+                'day_number': current_day['number'],
+                'title': current_day['title'],
+                'activities': current_activities
+            })
 
-            # Add last day
-            if current_day and current_activities:
-                days.append({
-                    'day_number': current_day['number'],
-                    'title': current_day['title'],
-                    'activities': current_activities
-                })
-
-            logger.debug(f"Parsed {len(days)} days from itinerary")
-            return days
-
-        except Exception as e:
-            logger.error(f"Error parsing itinerary: {str(e)}", exc_info=True)
-            raise
+        logger.debug(f"Parsed {len(days)} days from itinerary")
+        return days
 
     def create_calendar_events(self, credentials_dict, itinerary_content, start_date=None):
         """Create calendar events for each day in the itinerary"""
         try:
             # Parse the itinerary
             days = self.parse_itinerary(itinerary_content)
-            logger.debug(f"Creating calendar events for {len(days)} days")
 
             # If no start date provided, use tomorrow
             if not start_date:
@@ -233,8 +231,6 @@ class CalendarService:
             service = build('calendar', 'v3', credentials=credentials)
 
             created_events = []
-            events_preview = []  # Store event details for preview
-
             for day in days:
                 day_date = start_date + timedelta(days=day['day_number'] - 1)
 
@@ -249,7 +245,7 @@ class CalendarService:
                     # Calculate end time based on duration
                     end_datetime = start_datetime + timedelta(minutes=activity['duration'])
 
-                    # Create event details
+                    # Create event
                     event = {
                         'summary': f"Day {day['day_number']}: {activity['description']}",
                         'location': activity['location'],
@@ -264,24 +260,11 @@ class CalendarService:
                         }
                     }
 
-                    # Store preview
-                    events_preview.append({
-                        'summary': event['summary'],
-                        'location': event['location'],
-                        'start_time': activity['time'],
-                        'duration': f"{activity['duration']} minutes",
-                        'day': day['day_number']
-                    })
-
-                    # Create the event in Google Calendar
                     created_event = service.events().insert(calendarId='primary', body=event).execute()
                     created_events.append(created_event['id'])
                     logger.debug(f"Created calendar event: {created_event['id']}")
 
-            return {
-                'event_ids': created_events,
-                'preview': events_preview
-            }
+            return created_events
 
         except Exception as e:
             logger.error(f"Error creating calendar events: {str(e)}", exc_info=True)
