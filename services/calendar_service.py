@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -40,19 +41,24 @@ class CalendarService:
         """Generate the authorization URL for Google OAuth2"""
         try:
             logger.debug("Starting Google Calendar authorization URL generation")
+            logger.debug(f"Client ID exists: {bool(self.client_id)}")
+            logger.debug(f"Client Secret exists: {bool(self.client_secret)}")
             logger.debug(f"Using Replit domain: {self.replit_domain}")
 
             # Create the flow instance
+            client_config = {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
+                }
+            }
+            logger.debug(f"Client config (excluding secrets): {{'web': {{'redirect_uris': {client_config['web']['redirect_uris']}}}}}")
+
             flow = Flow.from_client_config(
-                client_config={
-                    "web": {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
-                    }
-                },
+                client_config=client_config,
                 scopes=self.SCOPES
             )
 

@@ -1,5 +1,6 @@
 import json
 import logging
+import os # Added to access environment variables
 from datetime import datetime
 from flask import jsonify, request, render_template, redirect, session, url_for
 from services.openai_service import generate_travel_plan
@@ -189,10 +190,18 @@ def register_routes(app):
         """Initiate the OAuth2 flow for Google Calendar"""
         try:
             logger.debug("Starting Google Calendar authentication")
-            logger.debug(f"Session before auth: {session}")
+            logger.debug(f"Session contents before auth: {session}")
+
+            # Check if we have the required environment variables
+            if not all([os.environ.get('GOOGLE_CLIENT_ID'), os.environ.get('GOOGLE_CLIENT_SECRET')]):
+                logger.error("Missing Google OAuth credentials in environment")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Google Calendar is not properly configured.'
+                }), 500
 
             authorization_url, state = calendar_service.get_authorization_url()
-            logger.debug(f"Generated authorization URL: {authorization_url}")
+            logger.debug(f"Generated authorization URL (truncated): {authorization_url[:100]}...")
             logger.debug(f"Generated state: {state}")
 
             session['oauth_state'] = state
@@ -221,7 +230,7 @@ def register_routes(app):
             logger.debug("Received OAuth2 callback")
             logger.debug(f"Full request URL: {request.url}")
             logger.debug(f"Request args: {request.args}")
-            logger.debug(f"Current session: {session}")
+            logger.debug(f"Current session contents: {session}")
 
             # Check for OAuth errors
             if 'error' in request.args:
@@ -236,18 +245,20 @@ def register_routes(app):
             state = session.get('oauth_state')
             if not state:
                 logger.error("No OAuth state found in session")
-                logger.debug(f"Current session contents: {session}")
+                logger.debug(f"Available session keys: {list(session.keys())}")
                 return jsonify({
                     'status': 'error',
                     'message': 'Invalid authentication state. Please try again.'
                 }), 400
 
-            # Process callback
+            logger.debug("Verifying OAuth2 callback")
             credentials_dict = calendar_service.verify_oauth2_callback(request.url, state)
+            logger.debug("Successfully verified OAuth2 callback")
 
             # Store credentials in session
             session['google_credentials'] = credentials_dict
-            logger.debug("Successfully stored Google credentials in session")
+            logger.debug("Stored Google credentials in session")
+            logger.debug("Authentication successful, redirecting to index")
 
             return redirect(url_for('index'))
 

@@ -391,13 +391,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Check calendar authentication status on page load
     async function checkCalendarAuth() {
         try {
+            console.log('Checking Google Calendar authentication status...');
             const response = await fetch('/api/calendar/status');
             const data = await response.json();
+            console.log('Calendar auth status response:', data);
+
+            const calendarStatus = document.getElementById('calendarStatus');
+            const calendarAuthBtn = document.getElementById('calendarAuthBtn');
+
+            if (!calendarStatus || !calendarAuthBtn) {
+                console.error('Calendar status elements not found in DOM');
+                return;
+            }
 
             if (data.authenticated) {
+                console.log('User is authenticated with Google Calendar');
                 calendarStatus.innerHTML = `
                     <p class="text-success mb-3">
                         <i data-feather="check-circle"></i>
@@ -408,13 +418,45 @@ document.addEventListener('DOMContentLoaded', function() {
                         Disconnect
                     </a>
                 `;
-                feather.replace();
+            } else {
+                console.log('User is not authenticated with Google Calendar');
+                const authButton = document.createElement('a');
+                authButton.href = '/api/calendar/auth';
+                authButton.className = 'btn btn-primary btn-sm';
+                authButton.innerHTML = `
+                    <i data-feather="calendar"></i>
+                    Connect Google Calendar
+                `;
+                authButton.addEventListener('click', (e) => {
+                    console.log('Connect Google Calendar button clicked');
+                    // Let the default navigation happen
+                });
+
+                calendarStatus.innerHTML = `
+                    <p class="text-warning mb-3">
+                        <i data-feather="alert-circle"></i>
+                        Not connected to Google Calendar
+                    </p>
+                `;
+                calendarStatus.appendChild(authButton);
             }
+            feather.replace();
         } catch (error) {
             console.error('Error checking calendar auth status:', error);
+            calendarStatus.innerHTML = `
+                <p class="text-danger mb-3">
+                    <i data-feather="alert-triangle"></i>
+                    Error connecting to Google Calendar
+                </p>
+                <a href="/api/calendar/auth" class="btn btn-primary btn-sm">
+                    <i data-feather="refresh-cw"></i>
+                    Try Again
+                </a>
+            `;
+            feather.replace();
         }
     }
 
-    // Initial check of calendar status
+    // Check calendar auth status when page loads
     checkCalendarAuth();
 });
