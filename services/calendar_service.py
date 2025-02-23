@@ -1,6 +1,5 @@
 import os
 import logging
-import re
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -36,7 +35,8 @@ class CalendarService:
     def get_authorization_url(self):
         """Generate the authorization URL for Google OAuth2"""
         try:
-            logger.debug(f"Generating authorization URL with domain: {self.replit_domain}")
+            logger.debug("Starting Google Calendar authorization URL generation")
+            logger.debug(f"Using Replit domain: {self.replit_domain}")
 
             # Create the flow instance
             flow = Flow.from_client_config(
@@ -53,8 +53,9 @@ class CalendarService:
             )
 
             # Set the redirect URI
-            flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
-            logger.debug(f"Set redirect URI to: {flow.redirect_uri}")
+            redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+            logger.debug(f"Setting redirect URI: {redirect_uri}")
+            flow.redirect_uri = redirect_uri
 
             # Generate authorization URL with offline access for refresh token
             authorization_url, state = flow.authorization_url(
@@ -64,10 +65,55 @@ class CalendarService:
             )
 
             logger.debug(f"Generated authorization URL: {authorization_url}")
+            logger.debug(f"Generated state: {state}")
             return authorization_url, state
 
         except Exception as e:
             logger.error(f"Error generating authorization URL: {str(e)}", exc_info=True)
+            raise
+
+    def verify_oauth2_callback(self, request_url, session_state):
+        """Verify and process the OAuth2 callback"""
+        try:
+            logger.debug("Processing OAuth2 callback")
+            logger.debug(f"Request URL: {request_url}")
+            logger.debug(f"Session state: {session_state}")
+
+            # Create flow instance for verification
+            flow = Flow.from_client_config(
+                client_config={
+                    "web": {
+                        "client_id": self.client_id,
+                        "client_secret": self.client_secret,
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
+                    }
+                },
+                scopes=self.SCOPES,
+                state=session_state
+            )
+
+            flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+            authorization_response = request_url.replace('http://', 'https://')
+
+            logger.debug("Fetching token from authorization response")
+            flow.fetch_token(authorization_response=authorization_response)
+
+            credentials = flow.credentials
+            logger.debug("Successfully obtained credentials")
+
+            return {
+                'token': credentials.token,
+                'refresh_token': credentials.refresh_token,
+                'token_uri': credentials.token_uri,
+                'client_id': credentials.client_id,
+                'client_secret': credentials.client_secret,
+                'scopes': credentials.scopes
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing OAuth callback: {str(e)}", exc_info=True)
             raise
 
     def parse_itinerary(self, content):

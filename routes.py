@@ -188,11 +188,19 @@ def register_routes(app):
     def calendar_auth():
         """Initiate the OAuth2 flow for Google Calendar"""
         try:
-            logger.debug("Initiating Google Calendar OAuth flow")
+            logger.debug("Starting Google Calendar authentication")
+            logger.debug(f"Session before auth: {session}")
+
             authorization_url, state = calendar_service.get_authorization_url()
             logger.debug(f"Generated authorization URL: {authorization_url}")
+            logger.debug(f"Generated state: {state}")
+
             session['oauth_state'] = state
+            logger.debug("Stored OAuth state in session")
+            logger.debug(f"Session after storing state: {session}")
+
             return redirect(authorization_url)
+
         except ValueError as ve:
             logger.error(f"Configuration error: {str(ve)}", exc_info=True)
             return jsonify({
@@ -210,57 +218,37 @@ def register_routes(app):
     def oauth2callback():
         """Handle the OAuth2 callback from Google"""
         try:
-            logger.debug("Handling Google Calendar OAuth callback")
-            logger.debug(f"Request URL: {request.url}")
-            logger.debug(f"Session state: {session.get('oauth_state')}")
+            logger.debug("Received OAuth2 callback")
+            logger.debug(f"Full request URL: {request.url}")
+            logger.debug(f"Request args: {request.args}")
+            logger.debug(f"Current session: {session}")
 
+            # Check for OAuth errors
             if 'error' in request.args:
                 error = request.args.get('error')
-                logger.error(f"OAuth error: {error}")
+                logger.error(f"OAuth error received: {error}")
                 return jsonify({
                     'status': 'error',
-                    'message': 'Failed to authenticate with Google Calendar.'
+                    'message': f'Failed to authenticate with Google Calendar: {error}'
                 }), 400
 
+            # Verify state
             state = session.get('oauth_state')
             if not state:
                 logger.error("No OAuth state found in session")
+                logger.debug(f"Current session contents: {session}")
                 return jsonify({
                     'status': 'error',
                     'message': 'Invalid authentication state. Please try again.'
                 }), 400
 
-            flow = Flow.from_client_config(
-                {
-                    "web": {
-                        "client_id": calendar_service.client_id,
-                        "client_secret": calendar_service.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [f"https://{calendar_service.replit_domain}/api/calendar/oauth2callback"]
-                    }
-                },
-                scopes=calendar_service.SCOPES,
-                state=state
-            )
+            # Process callback
+            credentials_dict = calendar_service.verify_oauth2_callback(request.url, state)
 
-            flow.redirect_uri = f"https://{calendar_service.replit_domain}/api/calendar/oauth2callback"
-            authorization_response = request.url.replace('http://', 'https://')
-            logger.debug(f"Authorization response URL: {authorization_response}")
+            # Store credentials in session
+            session['google_credentials'] = credentials_dict
+            logger.debug("Successfully stored Google credentials in session")
 
-            flow.fetch_token(authorization_response=authorization_response)
-            credentials = flow.credentials
-
-            session['google_credentials'] = {
-                'token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes
-            }
-
-            logger.debug("Google Calendar authentication successful")
             return redirect(url_for('index'))
 
         except Exception as e:
