@@ -64,7 +64,7 @@ class CalendarService:
                 scopes=self.SCOPES
             )
 
-            # Set the redirect URI
+            # Set the redirect URI with explicit HTTPS
             redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
             logger.debug(f"Setting redirect URI: {redirect_uri}")
             flow.redirect_uri = redirect_uri
@@ -75,6 +75,10 @@ class CalendarService:
                 include_granted_scopes='true',
                 prompt='consent'  # Force consent screen to always appear
             )
+
+            # Ensure the authorization URL uses HTTPS
+            if authorization_url.startswith('http://'):
+                authorization_url = 'https://' + authorization_url[7:]
 
             logger.debug(f"Generated authorization URL: {authorization_url}")
             logger.debug(f"Generated state: {state}")
