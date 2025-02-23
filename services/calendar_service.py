@@ -106,8 +106,13 @@ class CalendarService:
                 state=session_state
             )
 
+            # Always use HTTPS for the redirect URI
             flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
-            authorization_response = request_url.replace('http://', 'https://')
+
+            # Ensure the authorization response uses HTTPS
+            authorization_response = request_url
+            if authorization_response.startswith('http://'):
+                authorization_response = 'https://' + authorization_response[7:]
 
             logger.debug("Fetching token from authorization response")
             flow.fetch_token(authorization_response=authorization_response)

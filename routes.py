@@ -200,22 +200,22 @@ def register_routes(app):
                     'message': 'Google Calendar is not properly configured.'
                 }), 500
 
+            # Get the authorization URL
             authorization_url, state = calendar_service.get_authorization_url()
             logger.debug(f"Generated authorization URL (truncated): {authorization_url[:100]}...")
             logger.debug(f"Generated state: {state}")
 
+            # Store the state in the session
             session['oauth_state'] = state
             logger.debug("Stored OAuth state in session")
             logger.debug(f"Session after storing state: {session}")
 
+            # Ensure we're using HTTPS for the redirect
+            if authorization_url.startswith('http://'):
+                authorization_url = 'https://' + authorization_url[7:]
+
             return redirect(authorization_url)
 
-        except ValueError as ve:
-            logger.error(f"Configuration error: {str(ve)}", exc_info=True)
-            return jsonify({
-                'status': 'error',
-                'message': 'Google Calendar is not properly configured. Please try again later.'
-            }), 500
         except Exception as e:
             logger.error(f"Error initiating OAuth flow: {str(e)}", exc_info=True)
             return jsonify({
