@@ -142,6 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selectButton.addEventListener('click', async () => {
             try {
                 console.log('Selecting response:', optionData);
+                const queryText = messageInput.value.trim();
                 const response = await fetch('/api/chat/select', {
                     method: 'POST',
                     headers: {
@@ -149,13 +150,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     body: JSON.stringify({
                         user_id: userId,
-                        original_query: query,
+                        original_query: queryText,
                         selected_response: optionData.content
                     })
                 });
 
                 const data = await response.json();
-                console.log('Selection response:', data); //Added log
+                console.log('Selection response:', data);
+
                 if (data.status === 'success') {
                     // Hide other options
                     const options = chatMessages.querySelectorAll('.response-option');
