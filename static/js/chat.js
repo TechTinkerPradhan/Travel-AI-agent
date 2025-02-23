@@ -142,6 +142,12 @@ document.addEventListener('DOMContentLoaded', function() {
         selectButton.addEventListener('click', async () => {
             try {
                 console.log('Selecting response:', optionData);
+
+                // Disable the button and show loading state
+                selectButton.disabled = true;
+                selectButton.innerHTML = '<i data-feather="loader"></i> Selecting...';
+                feather.replace();
+
                 const queryText = messageInput.value.trim();
                 const response = await fetch('/api/chat/select', {
                     method: 'POST',
@@ -169,6 +175,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     // Update selected option appearance
                     selectButton.disabled = true;
+                    selectButton.classList.remove('btn-outline-primary');
+                    selectButton.classList.add('btn-success');
                     selectButton.innerHTML = '<i data-feather="check-circle"></i> Selected';
                     feather.replace();
 
@@ -198,10 +206,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } else {
                     console.error('Error selecting response:', data);
+                    selectButton.disabled = false;
+                    selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
+                    feather.replace();
                     addMessage('Error processing your selection. Please try again.', false, true);
                 }
             } catch (error) {
                 console.error('Error selecting response:', error);
+                selectButton.disabled = false;
+                selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
+                feather.replace();
                 addMessage('Error processing your selection. Please try again.', false, true);
             }
         });

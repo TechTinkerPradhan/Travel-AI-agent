@@ -193,6 +193,12 @@ def register_routes(app):
             logger.debug(f"Generated authorization URL: {authorization_url}")
             session['oauth_state'] = state
             return redirect(authorization_url)
+        except ValueError as ve:
+            logger.error(f"Configuration error: {str(ve)}", exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'message': f'Google Calendar configuration error: {str(ve)}'
+            }), 500
         except Exception as e:
             logger.error(f"Error initiating OAuth flow: {str(e)}", exc_info=True)
             return jsonify({
