@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 from pyairtable import Table
@@ -104,38 +105,81 @@ class AirtableService:
             logging.error(error_context)
             raise ValueError(f"Airtable Error: {str(e)}\nContext: {error_context}")
 
-    def get_user_preferences(self, user_id: str) -> Optional[Dict]:
-        """Retrieve user preferences from Airtable"""
+    def extract_dates_from_itinerary(self, content: str) -> tuple:
+        """Extract start and end dates from itinerary content"""
         try:
-            formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
-            logging.debug(f"Fetching preferences with formula: {formula}")
+            # First try to find explicit dates in the content
+            date_pattern = r'(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})'
+            dates = re.findall(date_pattern, content)
 
-            records = self.preferences_table.all(formula=formula)
-            if records:
-                record = records[0]['fields']
-                return {
-                    'budget': record.get('Budget Preference'),
-                    'travelStyle': record.get('Travel Style')
-                }
-            return None
+            if dates:
+                # Convert found dates to datetime objects
+                parsed_dates = [datetime.strptime(d, '%Y-%m-%d' if '-' in d else '%m/%d/%Y') for d in dates]
+                start_date = min(parsed_dates).strftime('%Y-%m-%d')
+                end_date = max(parsed_dates).strftime('%Y-%m-%d')
+            else:
+                # If no explicit dates found, count the number of days in the itinerary
+                day_pattern = r'Day\s+(\d+)'
+                days = re.findall(day_pattern, content)
+                num_days = max(map(int, days)) if days else 7  # Default to 7 days if no days found
+
+                # Use current date as start date
+                start_date = datetime.now().strftime('%Y-%m-%d')
+                end_date = (datetime.now() + timedelta(days=num_days)).strftime('%Y-%m-%d')
+
+            return start_date, end_date
+
         except Exception as e:
-            logging.error(f"Error retrieving user preferences: {str(e)}")
-            raise ValueError(f"Failed to retrieve preferences: {str(e)}")
+            logging.error(f"Error extracting dates from itinerary: {str(e)}")
+            # Return default dates if extraction fails
+            return (
+                datetime.now().strftime('%Y-%m-%d'),
+                (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+            )
+
+    def extract_destination_from_query(self, query: str) -> str:
+        """Extract destination from the original query"""
+        try:
+            # Look for patterns like "trip to [destination]" or "travel to [destination]"
+            destination_patterns = [
+                r'trip to ([A-Za-z\s]+)',
+                r'travel to ([A-Za-z\s]+)',
+                r'visiting ([A-Za-z\s]+)',
+                r'holiday in ([A-Za-z\s]+)',
+                r'vacation in ([A-Za-z\s]+)',
+                r'in ([A-Za-z\s]+)'
+            ]
+
+            for pattern in destination_patterns:
+                match = re.search(pattern, query.lower())
+                if match:
+                    destination = match.group(1).strip()
+                    # Capitalize the first letter of each word
+                    return ' '.join(word.capitalize() for word in destination.split())
+
+            # If no destination found in patterns, try to find location markers in the itinerary
+            locations = re.findall(r'\*\*([^*]+)\*\*', query)
+            if locations:
+                return locations[0].strip()
+
+            return "Unknown"
+
+        except Exception as e:
+            logging.error(f"Error extracting destination: {str(e)}")
+            return "Unknown"
 
     def save_user_itinerary(self, user_id: str, original_query: str, selected_itinerary: str, user_changes: str = '') -> Dict:
         """Save user itinerary to Airtable"""
         try:
             logging.debug(f"Creating itinerary record for user: {user_id}")
 
-            # Extract destination from the itinerary content
-            # Assuming the first line contains the destination
-            destination = original_query.split(' in ')[-1].split()[0] if ' in ' in original_query else 'Unknown'
+            # Extract destination
+            destination = self.extract_destination_from_query(original_query)
+            logging.debug(f"Extracted destination: {destination}")
 
-            # Parse the start and end dates from the itinerary content
-            # This is a simple implementation - you might want to enhance this based on your needs
-            lines = selected_itinerary.split('\n')
-            start_date = datetime.now().strftime('%Y-%m-%d')
-            end_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+            # Extract dates
+            start_date, end_date = self.extract_dates_from_itinerary(selected_itinerary)
+            logging.debug(f"Extracted dates: {start_date} to {end_date}")
 
             # Prepare fields for the itinerary record
             itinerary_fields = {
@@ -176,3 +220,21 @@ class AirtableService:
         except Exception as e:
             logging.error(f"Error saving user itinerary: {str(e)}")
             raise ValueError(f"Failed to save itinerary: {str(e)}")
+
+    def get_user_preferences(self, user_id: str) -> Optional[Dict]:
+        """Retrieve user preferences from Airtable"""
+        try:
+            formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
+            logging.debug(f"Fetching preferences with formula: {formula}")
+
+            records = self.preferences_table.all(formula=formula)
+            if records:
+                record = records[0]['fields']
+                return {
+                    'budget': record.get('Budget Preference'),
+                    'travelStyle': record.get('Travel Style')
+                }
+            return None
+        except Exception as e:
+            logging.error(f"Error retrieving user preferences: {str(e)}")
+            raise ValueError(f"Failed to retrieve preferences: {str(e)}")
