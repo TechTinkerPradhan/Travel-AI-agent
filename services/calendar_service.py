@@ -15,9 +15,16 @@ class CalendarService:
         # Explicitly set domain to match Google Cloud Console configuration
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
 
+        logger.debug("=== Calendar Service Initialization ===")
+        logger.debug(f"Using domain: {self.replit_domain}")
+
         # Use .get() with empty string defaults for safety
         self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
         self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
+
+        # Log credential information safely (only lengths)
+        logger.debug(f"Client ID length: {len(self.client_id)}")
+        logger.debug(f"Client Secret length: {len(self.client_secret)}")
 
         # Enhanced credential validation
         self.validate_credentials()
@@ -27,27 +34,27 @@ class CalendarService:
 
     def validate_credentials(self):
         """Validate the format and presence of credentials"""
-        logger.debug("Validating calendar credentials...")
+        logger.debug("Starting credential validation...")
 
         # Check credential presence
-        missing = []
         if not self.client_id:
-            missing.append("GOOGLE_CALENDAR_CLIENT_ID")
-        if not self.client_secret:
-            missing.append("GOOGLE_CALENDAR_CLIENT_SECRET")
+            logger.error("GOOGLE_CALENDAR_CLIENT_ID is missing or empty")
+            self.is_available = False
+            return
 
-        if missing:
-            logger.error(f"Missing credentials: {', '.join(missing)}")
+        if not self.client_secret:
+            logger.error("GOOGLE_CALENDAR_CLIENT_SECRET is missing or empty")
             self.is_available = False
             return
 
         # Validate Client ID format
         if not self.client_id.endswith('.apps.googleusercontent.com'):
-            logger.error("Invalid Client ID format - must end with .apps.googleusercontent.com")
+            logger.error(f"Invalid Client ID format - must end with .apps.googleusercontent.com")
+            logger.debug(f"Client ID ending: ...{self.client_id[-30:] if len(self.client_id) > 30 else self.client_id}")
             self.is_available = False
             return
 
-        logger.info("Calendar credentials validated successfully")
+        logger.info("✓ Calendar credentials validated successfully")
         self.is_available = True
 
     def check_availability(self):
@@ -85,7 +92,7 @@ class CalendarService:
                 prompt='consent'
             )
 
-            logger.info("Successfully generated authorization URL")
+            logger.info("✓ Successfully generated authorization URL")
             return authorization_url, state
         except Exception as e:
             logger.error(f"Error generating authorization URL: {str(e)}")
