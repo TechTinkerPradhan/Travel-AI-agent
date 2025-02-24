@@ -111,15 +111,7 @@ def register_routes(app):
                     }), 500
 
                 logger.debug("Successfully generated travel plan")
-                return jsonify({
-                    "status": "success",
-                    "alternatives": [
-                        {
-                            "content": plan_result.get("content", "Error: No content generated"),
-                            "explanation": plan_result.get("explanation", "")
-                        }
-                    ]
-                })
+                return jsonify(plan_result)
 
             except Exception as e:
                 logger.error(f"Error generating travel plan: {e}", exc_info=True)

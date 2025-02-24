@@ -23,9 +23,6 @@ def generate_travel_plan(message, user_preferences):
     """
     Generate multiple travel recommendations using OpenAI's API
     """
-    max_retries = 5
-    base_delay = 3
-
     try:
         logger.debug("Starting travel plan generation")
         logger.debug(f"Message: {message}")
@@ -86,35 +83,21 @@ def generate_travel_plan(message, user_preferences):
             mid = len(content) // 2
             plans = [content[:mid], content[mid:]]
 
-        # Format the response as JSON
+        # Format the response
         formatted_response = {
             "status": "success",
             "alternatives": [
                 {
-                    "id": "option_1",
-                    "content": plans[0].strip(),
-                    "type": "itinerary"
-                },
-                {
-                    "id": "option_2",
-                    "content": plans[1].strip(),
+                    "id": f"option_{i+1}",
+                    "content": plan.strip(),
                     "type": "itinerary"
                 }
+                for i, plan in enumerate(plans)
             ]
         }
 
-        # Verify JSON serialization
-        json.dumps(formatted_response)  # This will raise an error if not JSON serializable
         return formatted_response
 
-    except RateLimitError as e:
-        logger.error(f"Rate limit error: {str(e)}")
-        raise Exception(
-            "We're experiencing high traffic. Please wait 30 seconds and try again."
-        )
-    except (APIError, APIConnectionError) as e:
-        logger.error(f"OpenAI API error: {str(e)}")
-        raise Exception(f"Failed to generate travel plan: {str(e)}")
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
