@@ -7,60 +7,41 @@
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
-    <!-- Add marked library for markdown parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Add Bootstrap JavaScript -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
     <div class="container py-4">
-        <header class="text-center mb-5">
-            <h1 class="display-4">AI Travel Assistant</h1>
-            <p class="lead">Your personal travel planning companion</p>
-        </header>
-
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5 class="card-title">Travel Preferences</h5>
-                        <form id="preferencesForm">
-                            <div class="mb-3">
-                                <label for="budget" class="form-label">Budget Range</label>
-                                <select class="form-select" id="budget" name="budget">
-                                    <option value="Budget">Budget</option>
-                                    <option value="Moderate">Moderate</option>
-                                    <option value="Luxury">Luxury</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="travelStyle" class="form-label">Travel Style</label>
-                                <select class="form-select" id="travelStyle" name="travelStyle">
-                                    <option value="Adventure">Adventure</option>
-                                    <option value="Relaxation">Relaxation</option>
-                                    <option value="Culture">Culture</option>
-                                </select>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Save Preferences</button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5 class="card-title">Calendar Integration</h5>
-                        <div id="calendarStatus">
-                            <p class="text-muted mb-3">Connect your Google Calendar to save travel itineraries</p>
-                            <a href="/api/calendar/auth" class="btn btn-outline-primary" id="calendarAuthBtn">
-                                <i data-feather="calendar"></i>
-                                Connect Google Calendar
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="{{ url_for('index') }}">AI Travel Assistant</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="{{ url_for('index') }}">
+                                <i data-feather="message-square"></i> Chat
                             </a>
-                        </div>
-                    </div>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('preferences') }}">
+                                <i data-feather="settings"></i> Preferences
+                            </a>
+                        </li>
+                    </ul>
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.logout') }}">
+                                <i data-feather="log-out"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
                 </div>
             </div>
+        </nav>
 
-            <div class="col-md-8">
+        <div class="row">
+            <div class="col-md-12">
                 <div class="card chat-container">
                     <div class="card-body">
                         <div id="chatMessages" class="chat-messages mb-3">
@@ -113,8 +94,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <!-- Add chat.js after Bootstrap and other dependencies -->
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
     <script>
         feather.replace();

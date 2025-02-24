@@ -36,7 +36,7 @@ def google_login():
                 "client_secret": GOOGLE_CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [request.base_url.replace("http://", "https://") + "/callback"]
+                "redirect_uris": [url_for('auth.google_callback', _external=True, _scheme='https')]
             }
         },
         scopes=['openid', 'email', 'profile']
@@ -51,74 +51,93 @@ def google_login():
     session['state'] = state
     return redirect(authorization_url)
 
-@auth.route('/google_login/callback')
+@auth.route('/google_callback')
 def google_callback():
+    # Verify state to prevent CSRF
     state = session.get('state')
+    if not state or state != request.args.get('state'):
+        return "Invalid state parameter", 400
 
-    flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [request.base_url.replace("http://", "https://")]
-            }
-        },
-        scopes=['openid', 'email', 'profile'],
-        state=state
-    )
-
-    flow.fetch_token(
-        authorization_response=request.url.replace("http://", "https://")
-    )
-
-    credentials = flow.credentials
-    id_info = id_token.verify_oauth2_token(
-        credentials.id_token, requests.Request(), GOOGLE_CLIENT_ID
-    )
-
-    email = id_info.get('email')
-    name = id_info.get('name')
-    google_id = id_info.get('sub')
-
-    # Create or get user
-    user = User.query.filter_by(email=email).first()
-    is_new_user = False
-
-    if not user:
-        is_new_user = True
-        user = User(
-            email=email,
-            name=name,
-            google_id=google_id
+    try:
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [url_for('auth.google_callback', _external=True, _scheme='https')]
+                }
+            },
+            scopes=['openid', 'email', 'profile'],
+            state=state
         )
-        db.session.add(user)
-        db.session.commit()
 
-    # If this is a new user, initialize their Airtable records
-    if is_new_user:
+        # Use the same redirect_uri as configured in flow
+        flow.redirect_uri = url_for('auth.google_callback', _external=True, _scheme='https')
+
+        # Handle authorization response
+        flow.fetch_token(authorization_response=request.url)
+
+        # Get user info from Google
+        credentials = flow.credentials
         try:
-            # Initialize user preferences with default values
-            preferences = {
-                'budget': 'Moderate',  # Default budget preference
-                'travelStyle': 'Adventure'  # Default travel style
-            }
-
-            # Save initial preferences to Airtable
-            airtable_service.save_user_preferences(
-                user_id=str(user.id),
-                preferences=preferences
+            id_info = id_token.verify_oauth2_token(
+                credentials.id_token, requests.Request(), GOOGLE_CLIENT_ID
             )
+        except ValueError as e:
+            logging.error(f"Error verifying Google token: {e}")
+            return "Invalid token", 400
 
-            logging.info(f"Initialized Airtable records for new user {user.id}")
-        except Exception as e:
-            logging.error(f"Error initializing Airtable records for user {user.id}: {e}")
-            # Don't block login if Airtable initialization fails
-            pass
+        email = id_info.get('email')
+        name = id_info.get('name')
+        google_id = id_info.get('sub')
 
-    login_user(user)
-    return redirect(url_for('index'))
+        if not email or not google_id:
+            logging.error("Missing email or google_id from token")
+            return "Invalid user info", 400
+
+        # Create or get user
+        user = User.query.filter_by(email=email).first()
+        is_new_user = False
+
+        if not user:
+            is_new_user = True
+            user = User(
+                email=email,
+                name=name,
+                google_id=google_id
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        # If this is a new user, initialize their Airtable records
+        if is_new_user:
+            try:
+                # Initialize user preferences with default values
+                preferences = {
+                    'budget': 'Moderate',  # Default budget preference
+                    'travelStyle': 'Adventure'  # Default travel style
+                }
+
+                # Save initial preferences to Airtable
+                airtable_service.save_user_preferences(
+                    user_id=str(user.id),
+                    preferences=preferences
+                )
+
+                logging.info(f"Initialized Airtable records for new user {user.id}")
+            except Exception as e:
+                logging.error(f"Error initializing Airtable records for user {user.id}: {e}")
+                # Don't block login if Airtable initialization fails
+                pass
+
+        login_user(user)
+        return redirect(url_for('index'))
+
+    except Exception as e:
+        logging.error(f"Error in google_callback: {e}", exc_info=True)
+        return f"Authentication error: {str(e)}", 400
 
 @auth.route('/logout')
 @login_required
