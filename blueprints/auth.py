@@ -9,6 +9,7 @@ import json
 import logging
 from models.user import User
 from app import db
+from services.airtable_service import AirtableService
 
 auth = Blueprint('auth', __name__)
 
@@ -17,10 +18,13 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
+# Initialize Airtable service
+airtable_service = AirtableService()
+
 @auth.route('/login')
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('index'))
     return render_template('login.html')
 
 @auth.route('/google_login')
@@ -78,8 +82,12 @@ def google_callback():
     name = id_info.get('name')
     google_id = id_info.get('sub')
 
+    # Create or get user
     user = User.query.filter_by(email=email).first()
+    is_new_user = False
+
     if not user:
+        is_new_user = True
         user = User(
             email=email,
             name=name,
@@ -88,8 +96,29 @@ def google_callback():
         db.session.add(user)
         db.session.commit()
 
+    # If this is a new user, initialize their Airtable records
+    if is_new_user:
+        try:
+            # Initialize user preferences with default values
+            preferences = {
+                'budget': 'Moderate',  # Default budget preference
+                'travelStyle': 'Adventure'  # Default travel style
+            }
+
+            # Save initial preferences to Airtable
+            airtable_service.save_user_preferences(
+                user_id=str(user.id),
+                preferences=preferences
+            )
+
+            logging.info(f"Initialized Airtable records for new user {user.id}")
+        except Exception as e:
+            logging.error(f"Error initializing Airtable records for user {user.id}: {e}")
+            # Don't block login if Airtable initialization fails
+            pass
+
     login_user(user)
-    return redirect(url_for('main.index'))
+    return redirect(url_for('index'))
 
 @auth.route('/logout')
 @login_required
