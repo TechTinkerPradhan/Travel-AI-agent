@@ -382,6 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     // Handle refinement
                     refineButton.addEventListener('click', () => {
+                        window.awaitingRefinement = true;
                         const refinement = prompt('What changes would you like to make to the itinerary?');
                         if (refinement) {
                             addMessage(refinement, true);
@@ -631,9 +632,35 @@ document.addEventListener('DOMContentLoaded', function() {
         return userId;
     }
 
-    //Helper function to send message (assuming this function exists elsewhere)
-    function sendMessage(message) {
-        //Implementation to send the message to the backend
-        console.log("Sending message:", message);
+    async function sendMessage(message) {
+        try {
+            console.log("Sending chat request:", message);
+
+            // If we're in refinement mode, treat this as a refinement request
+            if (window.awaitingRefinement && message.toLowerCase() !== 'confirm') {
+                addMessage(message, true);
+                // Clear previous response options
+                const oldOptions = document.querySelectorAll('.response-option');
+                oldOptions.forEach(opt => opt.remove());
+                window.awaitingRefinement = false;
+            } else {
+                //Regular message sending
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: userId
+                    })
+                });
+                const data = await response.json();
+                addMessage(data);
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            addMessage('Error sending message: ' + error.message, false, true);
+        }
     }
 });
