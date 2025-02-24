@@ -9,9 +9,7 @@ from googleapiclient.discovery import build
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
 class CalendarService:
-
     def __init__(self):
         """Initialize Google Calendar OAuth configuration"""
         self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
@@ -73,7 +71,8 @@ class CalendarService:
             authorization_url, state = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
-                prompt='consent')
+                prompt='consent'
+            )
 
             logger.debug("Successfully generated authorization URL")
             return authorization_url, state
@@ -83,11 +82,11 @@ class CalendarService:
 
     def verify_oauth2_callback(self, request_url, session_state):
         """Handle the callback from Google with authorization code"""
-        if not self.is_available:
-            raise ValueError(
-                "Calendar service is not configured - missing credentials")
+        if not self.check_availability():
+            raise ValueError("Calendar service is not configured - missing credentials")
 
         redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
+        logger.debug(f"Processing OAuth callback with redirect URI: {redirect_uri}")
 
         client_config = {
             "web": {
@@ -99,26 +98,34 @@ class CalendarService:
             }
         }
 
-        flow = Flow.from_client_config(client_config,
-                                       scopes=self.SCOPES,
-                                       state=session_state)
-        flow.redirect_uri = redirect_uri
+        try:
+            flow = Flow.from_client_config(
+                client_config,
+                scopes=self.SCOPES,
+                state=session_state
+            )
+            flow.redirect_uri = redirect_uri
 
-        # Ensure request URL is properly formatted
-        if request_url.startswith('http://'):
-            request_url = 'https://' + request_url[7:]
+            # Ensure request URL is properly formatted
+            if request_url.startswith('http://'):
+                request_url = 'https://' + request_url[7:]
 
-        flow.fetch_token(authorization_response=request_url)
-        creds = flow.credentials
+            logger.debug(f"Fetching token with authorization response URL")
+            flow.fetch_token(authorization_response=request_url)
+            creds = flow.credentials
 
-        return {
-            'token': creds.token,
-            'refresh_token': creds.refresh_token,
-            'token_uri': creds.token_uri,
-            'client_id': creds.client_id,
-            'client_secret': creds.client_secret,
-            'scopes': creds.scopes
-        }
+            logger.info("Successfully obtained OAuth credentials")
+            return {
+                'token': creds.token,
+                'refresh_token': creds.refresh_token,
+                'token_uri': creds.token_uri,
+                'client_id': creds.client_id,
+                'client_secret': creds.client_secret,
+                'scopes': creds.scopes
+            }
+        except Exception as e:
+            logger.error(f"Error in OAuth callback: {str(e)}")
+            raise
 
     def create_calendar_events(self,
                                credentials_dict,
