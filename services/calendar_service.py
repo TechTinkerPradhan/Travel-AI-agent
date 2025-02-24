@@ -12,46 +12,55 @@ logger = logging.getLogger(__name__)
 class CalendarService:
     def __init__(self):
         """Initialize Google Calendar OAuth configuration"""
-        # Use .get() to avoid KeyError
-        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
-        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
+        # Explicitly set domain to match Google Cloud Console configuration
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
 
-        # Check if credentials exist and log more details for debugging
-        logger.debug("CalendarService initialization attempt:")
-        logger.debug(f" - Calendar Client ID length: {len(self.client_id)}")
-        logger.debug(f" - Calendar Secret length: {len(self.client_secret)}")
-        logger.debug(f" - Domain: {self.replit_domain}")
+        # Use .get() with empty string defaults for safety
+        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
+        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
 
-        # Validate credentials
-        self.is_available = bool(self.client_id and self.client_secret)
-        if not self.is_available:
-            missing = []
-            if not self.client_id:
-                missing.append("GOOGLE_CALENDAR_CLIENT_ID")
-            if not self.client_secret:
-                missing.append("GOOGLE_CALENDAR_CLIENT_SECRET")
-            logger.error(f"Missing credentials: {', '.join(missing)}")
-        else:
-            logger.info("Calendar service initialized successfully")
+        # Enhanced credential validation
+        self.validate_credentials()
 
         # Define Google Calendar scopes
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
+    def validate_credentials(self):
+        """Validate the format and presence of credentials"""
+        logger.debug("Validating calendar credentials...")
+
+        # Check credential presence
+        missing = []
+        if not self.client_id:
+            missing.append("GOOGLE_CALENDAR_CLIENT_ID")
+        if not self.client_secret:
+            missing.append("GOOGLE_CALENDAR_CLIENT_SECRET")
+
+        if missing:
+            logger.error(f"Missing credentials: {', '.join(missing)}")
+            self.is_available = False
+            return
+
+        # Validate Client ID format
+        if not self.client_id.endswith('.apps.googleusercontent.com'):
+            logger.error("Invalid Client ID format - must end with .apps.googleusercontent.com")
+            self.is_available = False
+            return
+
+        logger.info("Calendar credentials validated successfully")
+        self.is_available = True
+
     def check_availability(self):
         """Check if Google Calendar service is available"""
-        logger.debug("Checking calendar service availability")
         if not self.is_available:
-            logger.error("Calendar service unavailable - missing credentials")
+            logger.error("Calendar service unavailable - invalid or missing credentials")
             return False
         return True
 
     def get_authorization_url(self):
         """Generate the Google OAuth2 authorization URL."""
         if not self.check_availability():
-            raise ValueError("Calendar service is not configured - missing credentials")
-
-        logger.debug("Generating Google Calendar OAuth URL...")
+            raise ValueError("Calendar service is not configured - invalid or missing credentials")
 
         redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
         logger.debug(f"Using redirect URI: {redirect_uri}")
@@ -76,7 +85,7 @@ class CalendarService:
                 prompt='consent'
             )
 
-            logger.debug("Successfully generated authorization URL")
+            logger.info("Successfully generated authorization URL")
             return authorization_url, state
         except Exception as e:
             logger.error(f"Error generating authorization URL: {str(e)}")
