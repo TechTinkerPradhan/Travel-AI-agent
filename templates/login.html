@@ -3,32 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - AI Travel Assistant</title>
-    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <title>Welcome - AI Travel Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <style>
+        .welcome-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--bs-dark) 0%, var(--bs-dark-bg-subtle) 100%);
+        }
+        .welcome-card {
+            max-width: 500px;
+            width: 90%;
+            background: rgba(33, 37, 41, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 2rem;
+        }
+        .google-btn {
+            background-color: #fff;
+            color: #333;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .google-btn:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .welcome-features {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            color: var(--bs-gray-300);
+        }
+        .feature-item i {
+            color: var(--bs-primary);
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="row justify-content-center mt-5">
-            <div class="col-md-6 text-center">
-                <div class="card">
-                    <div class="card-body">
-                        <h1 class="card-title mb-4">Welcome to AI Travel Assistant</h1>
-                        <p class="card-text">Please sign in with your Google account to continue</p>
+    <div class="welcome-container">
+        <div class="welcome-card text-center">
+            <h1 class="display-5 mb-4">
+                <i data-feather="compass" class="me-2"></i>
+                AI Travel Assistant
+            </h1>
+            <p class="lead mb-4">Your intelligent companion for crafting perfect travel experiences</p>
 
-                        <div class="d-grid gap-2 col-8 mx-auto">
-                            <a href="{{ url_for('auth.google_login') }}" class="btn btn-primary">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" 
-                                     alt="Google" class="me-2" height="20">
-                                Sign in with Google
-                            </a>
-                        </div>
-                    </div>
+            <a href="{{ url_for('auth.login') }}" class="google-btn text-decoration-none">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" 
+                     alt="Google" height="24">
+                Sign in with Google
+            </a>
+
+            <div class="welcome-features">
+                <div class="feature-item">
+                    <i data-feather="map"></i>
+                    <span>Personalized travel planning with AI</span>
+                </div>
+                <div class="feature-item">
+                    <i data-feather="calendar"></i>
+                    <span>Google Calendar integration</span>
+                </div>
+                <div class="feature-item">
+                    <i data-feather="clock"></i>
+                    <span>Real-time itinerary generation</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script>
+        feather.replace();
+    </script>
 </body>
 </html>
