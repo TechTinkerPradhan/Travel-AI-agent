@@ -27,7 +27,7 @@ class CalendarService:
         else:
             logger.warning("Calendar service unavailable - missing credentials")
 
-        # Calendar-specific scopes
+        # Calendar-specific scopes only
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
     def check_availability(self):
@@ -41,7 +41,9 @@ class CalendarService:
 
         logger.debug("Generating Google Calendar auth URL...")
 
+        # Calendar-specific callback URL
         redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+
         client_config = {
             "web": {
                 "client_id": self.client_id,
@@ -60,7 +62,7 @@ class CalendarService:
 
         authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
+            include_granted_scopes='false',  # Don't include additional scopes
             prompt='consent'
         )
 
@@ -72,6 +74,7 @@ class CalendarService:
             raise ValueError("Calendar service is not configured - missing credentials")
 
         redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+
         client_config = {
             "web": {
                 "client_id": self.client_id,

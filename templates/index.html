@@ -46,7 +46,7 @@
                 <div id="calendarStatus">
                     <p class="text-muted mb-3">Connect your Google Calendar to save travel itineraries</p>
                     <div class="d-grid gap-2">
-                        <a href="/api/calendar/auth" class="btn btn-outline-primary" id="calendarAuthBtn">
+                        <a href="{{ url_for('calendar_auth') }}" class="btn btn-outline-primary" id="calendarAuthBtn">
                             <i data-feather="calendar"></i>
                             Connect Google Calendar
                         </a>

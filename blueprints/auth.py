@@ -1,5 +1,3 @@
-# blueprints/auth.py
-
 import os
 import requests
 from flask import Blueprint, redirect, url_for, render_template, request, session
@@ -10,115 +8,122 @@ from models.user import User
 
 auth = Blueprint('auth', __name__, template_folder='../templates')
 
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+REPLIT_DOMAIN = "ai-travel-buddy-bboyswagat.replit.app"
 
 @auth.route('/login')
 def login():
-    """Renders your login page with the 'Sign in with Google' button."""
-    # If the user is already logged in, redirect them to the main page
+    """Renders login page with the 'Sign in with Google' button."""
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    return render_template("login.html")  # Your login.html
-
+    return render_template("login.html")
 
 @auth.route('/google_login')
 def google_login():
     """
-    Initiates Google OAuth flow with short scopes: 'openid', 'email', 'profile'.
-    Then user is redirected to Google's consent page.
+    Initiates Google OAuth flow for authentication (NOT calendar).
+    Uses only authentication scopes: 'openid', 'email', 'profile'
     """
-    # Hardcode your callback route
-    redirect_uri = "https://ai-travel-buddy-bboyswagat.replit.app/auth/google_callback"
+    # Auth-specific callback URL
+    redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google/callback"
 
-    # Build Flow with short scope strings
+    # Strictly use only authentication scopes
+    auth_scopes = [
+        'openid',
+        'email',
+        'profile'
+    ]
+
     flow = Flow.from_client_config(
-        client_config={
+        {
             "web": {
-                "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
-                "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
                 "redirect_uris": [redirect_uri]
             }
         },
-        scopes=["openid", "email", "profile"]  # short scope style
+        scopes=auth_scopes
     )
 
     flow.redirect_uri = redirect_uri
 
     authorization_url, state = flow.authorization_url(
-        access_type='offline', include_granted_scopes='true', prompt='consent')
+        access_type='offline',
+        include_granted_scopes='false',  # Don't include additional scopes
+        prompt='consent'
+    )
 
-    # Store state in session
     session['oauth_state'] = state
     return redirect(authorization_url)
 
-
-@auth.route('/callback')
-def callback():
+@auth.route('/google/callback')  # Changed from /google_callback
+def google_callback():
     """
-    Google OAuth callback. Exchanges 'code' for tokens and fetches user info.
-    Then logs in / registers user in local DB.
+    Google OAuth callback for authentication only.
+    Handles user login/registration.
     """
-    # Retrieve state
     state = session.get('oauth_state')
     if not state:
-        return "Missing OAuth state, or session expired", 400
+        return "Invalid state parameter", 400
 
-    # Build Flow again with same scopes
-    redirect_uri = "https://yourapp.repl.co/auth/callback"
-    flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
-                "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [redirect_uri]
-            }
-        },
-        scopes=["openid", "email", "profile"],  # same short scopes
-        state=state)
-    flow.redirect_uri = redirect_uri
+    try:
+        # Use the same authentication-only scopes
+        auth_scopes = ['openid', 'email', 'profile']
+        redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google/callback"
 
-    # Finish OAuth handshake
-    authorization_response = request.url
-    flow.fetch_token(authorization_response=authorization_response)
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [redirect_uri]
+                }
+            },
+            scopes=auth_scopes,
+            state=state
+        )
 
-    # Now we can get user info. We'll call Google userinfo endpoint using short scope approach:
-    # For 'profile'/'email', we can use the token to get user info from an endpoint like:
-    creds = flow.credentials
-    token = creds.token
+        flow.redirect_uri = redirect_uri
 
-    # You can use either the old "v2" userinfo or the OIDC "userinfo" endpoint:
-    userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-    # or "https://openidconnect.googleapis.com/v1/userinfo"
+        # Handle authorization response
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
 
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(userinfo_url, headers=headers)
-    if response.status_code != 200:
-        return f"Failed to retrieve user info: {response.text}", 400
+        # Get user info using the token
+        userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+        headers = {"Authorization": f"Bearer {credentials.token}"}
+        response = requests.get(userinfo_url, headers=headers)
 
-    google_user = response.json()
-    # google_user should have "email", "id" or "sub", "picture", "name", etc.
+        if response.status_code != 200:
+            return f"Failed to get user info: {response.text}", 400
 
-    email = google_user.get('email')
-    google_id = google_user.get('id') or google_user.get('sub')
-    if not email:
-        return "Unable to retrieve email from Google", 400
+        userinfo = response.json()
+        email = userinfo.get('email')
+        if not email:
+            return "Could not get user email", 400
 
-    # Check or create user in DB
-    existing_user = User.query.filter_by(email=email).first()
-    if not existing_user:
-        # Create user
-        new_user = User(email=email, google_id=google_id)
-        db.session.add(new_user)
-        db.session.commit()
-        existing_user = new_user
+        # Find or create user
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User(
+                email=email,
+                name=userinfo.get('name'),
+                google_id=userinfo.get('id')
+            )
+            db.session.add(user)
+            db.session.commit()
 
-    # Log the user in
-    login_user(existing_user)
-    return redirect(url_for('index'))  # or wherever your main AI page is
+        login_user(user)
+        return redirect(url_for('index'))
 
+    except Exception as e:
+        return f"Error in OAuth callback: {str(e)}", 400
 
 @auth.route('/logout')
 def logout():
