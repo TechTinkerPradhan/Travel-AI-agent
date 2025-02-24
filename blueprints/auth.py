@@ -1,160 +1,127 @@
-from flask import Blueprint, redirect, url_for, session, request, render_template
-from flask_login import login_user, logout_user, login_required, current_user
-from google_auth_oauthlib.flow import Flow
-from google.oauth2.credentials import Credentials
-from google.oauth2 import id_token
-from google.auth.transport import requests
+# blueprints/auth.py
+
 import os
-import json
-import logging
-from models.user import User
+import requests
+from flask import Blueprint, redirect, url_for, render_template, request, session
+from flask_login import login_user, current_user, logout_user
+from google_auth_oauthlib.flow import Flow
 from app import db
-from services.airtable_service import AirtableService
+from models.user import User
 
-auth = Blueprint('auth', __name__)
+auth = Blueprint('auth', __name__, template_folder='../templates')
 
-# Configure Google OAuth
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
-REPLIT_DOMAIN = "ai-travel-buddy-bboyswagat.replit.app"
-
-# Initialize Airtable service
-airtable_service = AirtableService()
 
 @auth.route('/login')
 def login():
+    """Renders your login page with the 'Sign in with Google' button."""
+    # If the user is already logged in, redirect them to the main page
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    return render_template('login.html')
+    return render_template("login.html")  # Your login.html
+
 
 @auth.route('/google_login')
 def google_login():
-    # Strictly use only authentication scopes, no calendar scopes
-    auth_scopes = [
-        'openid',
-        'email',
-        'profile'
-    ]
+    """
+    Initiates Google OAuth flow with short scopes: 'openid', 'email', 'profile'.
+    Then user is redirected to Google's consent page.
+    """
+    # Hardcode your callback route
+    redirect_uri = "https://ai-travel-buddy-bboyswagat.replit.app/auth/google_callback"
 
+    # Build Flow with short scope strings
+    flow = Flow.from_client_config(
+        client_config={
+            "web": {
+                "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
+                "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri]
+            }
+        },
+        scopes=["openid", "email", "profile"]  # short scope style
+    )
+
+    flow.redirect_uri = redirect_uri
+
+    authorization_url, state = flow.authorization_url(
+        access_type='offline', include_granted_scopes='true', prompt='consent')
+
+    # Store state in session
+    session['oauth_state'] = state
+    return redirect(authorization_url)
+
+
+@auth.route('/callback')
+def callback():
+    """
+    Google OAuth callback. Exchanges 'code' for tokens and fetches user info.
+    Then logs in / registers user in local DB.
+    """
+    # Retrieve state
+    state = session.get('oauth_state')
+    if not state:
+        return "Missing OAuth state, or session expired", 400
+
+    # Build Flow again with same scopes
+    redirect_uri = "https://yourapp.repl.co/auth/callback"
     flow = Flow.from_client_config(
         {
             "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
+                "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
+                "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
+                "redirect_uris": [redirect_uri]
             }
         },
-        scopes=auth_scopes  # Use auth-only scopes
-    )
+        scopes=["openid", "email", "profile"],  # same short scopes
+        state=state)
+    flow.redirect_uri = redirect_uri
 
-    # Set the redirect URI using the configured domain
-    flow.redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
+    # Finish OAuth handshake
+    authorization_response = request.url
+    flow.fetch_token(authorization_response=authorization_response)
 
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='false',  # Don't include additional scopes
-        prompt='consent'
-    )
+    # Now we can get user info. We'll call Google userinfo endpoint using short scope approach:
+    # For 'profile'/'email', we can use the token to get user info from an endpoint like:
+    creds = flow.credentials
+    token = creds.token
 
-    session['state'] = state
-    return redirect(authorization_url)
+    # You can use either the old "v2" userinfo or the OIDC "userinfo" endpoint:
+    userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+    # or "https://openidconnect.googleapis.com/v1/userinfo"
 
-@auth.route('/google_callback')
-def google_callback():
-    # Verify state to prevent CSRF
-    state = session.get('state')
-    if not state or state != request.args.get('state'):
-        return "Invalid state parameter", 400
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(userinfo_url, headers=headers)
+    if response.status_code != 200:
+        return f"Failed to retrieve user info: {response.text}", 400
 
-    try:
-        # Use the same auth-only scopes as in google_login
-        auth_scopes = ['openid', 'email', 'profile']
+    google_user = response.json()
+    # google_user should have "email", "id" or "sub", "picture", "name", etc.
 
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": GOOGLE_CLIENT_ID,
-                    "client_secret": GOOGLE_CLIENT_SECRET,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
-                }
-            },
-            scopes=auth_scopes,  # Use auth-only scopes
-            state=state
-        )
+    email = google_user.get('email')
+    google_id = google_user.get('id') or google_user.get('sub')
+    if not email:
+        return "Unable to retrieve email from Google", 400
 
-        # Use the same redirect_uri as configured in flow
-        flow.redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
+    # Check or create user in DB
+    existing_user = User.query.filter_by(email=email).first()
+    if not existing_user:
+        # Create user
+        new_user = User(email=email, google_id=google_id)
+        db.session.add(new_user)
+        db.session.commit()
+        existing_user = new_user
 
-        # Handle authorization response
-        flow.fetch_token(authorization_response=request.url)
+    # Log the user in
+    login_user(existing_user)
+    return redirect(url_for('index'))  # or wherever your main AI page is
 
-        # Get user info from Google
-        credentials = flow.credentials
-        try:
-            id_info = id_token.verify_oauth2_token(
-                credentials.id_token, requests.Request(), GOOGLE_CLIENT_ID
-            )
-        except ValueError as e:
-            logging.error(f"Error verifying Google token: {e}")
-            return "Invalid token", 400
-
-        email = id_info.get('email')
-        name = id_info.get('name')
-        google_id = id_info.get('sub')
-
-        if not email or not google_id:
-            logging.error("Missing email or google_id from token")
-            return "Invalid user info", 400
-
-        # Create or get user
-        user = User.query.filter_by(email=email).first()
-        is_new_user = False
-
-        if not user:
-            is_new_user = True
-            user = User(
-                email=email,
-                name=name,
-                google_id=google_id
-            )
-            db.session.add(user)
-            db.session.commit()
-
-        # If this is a new user, initialize their Airtable records
-        if is_new_user:
-            try:
-                # Initialize user preferences with default values
-                preferences = {
-                    'budget': 'Moderate',  # Default budget preference
-                    'travelStyle': 'Adventure'  # Default travel style
-                }
-
-                # Save initial preferences to Airtable
-                airtable_service.save_user_preferences(
-                    user_id=str(user.id),
-                    preferences=preferences
-                )
-
-                logging.info(f"Initialized Airtable records for new user {user.id}")
-            except Exception as e:
-                logging.error(f"Error initializing Airtable records for user {user.id}: {e}")
-                # Don't block login if Airtable initialization fails
-                pass
-
-        login_user(user)
-        return redirect(url_for('index'))
-
-    except Exception as e:
-        logging.error(f"Error in google_callback: {e}", exc_info=True)
-        return f"Authentication error: {str(e)}", 400
 
 @auth.route('/logout')
-@login_required
 def logout():
+    """Logout current user."""
     logout_user()
     return redirect(url_for('auth.login'))
