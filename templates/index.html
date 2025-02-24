@@ -9,11 +9,14 @@
     <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
 </head>
-<body>
+<body class="bg-dark">
     <div class="container py-4">
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
             <div class="container-fluid">
-                <a class="navbar-brand" href="{{ url_for('index') }}">AI Travel Assistant</a>
+                <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+                    <i data-feather="compass" class="me-2"></i>
+                    AI Travel Assistant
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
@@ -31,7 +34,10 @@
 
         <div class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title">Calendar Integration</h5>
+                <h5 class="card-title d-flex align-items-center">
+                    <i data-feather="calendar" class="me-2"></i>
+                    Calendar Integration
+                </h5>
                 <div id="calendarStatus">
                     <p class="text-muted mb-3">Connect your Google Calendar to save travel itineraries</p>
                     <div class="d-grid gap-2">
@@ -53,26 +59,22 @@
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card chat-container">
-                    <div class="card-body">
-                        <div id="chatMessages" class="chat-messages mb-3">
-                            <div class="message system">
-                                Hello! I'm your AI travel assistant. How can I help you plan your next trip?
-                            </div>
-                        </div>
-                        <form id="chatForm" class="chat-input">
-                            <div class="input-group">
-                                <input type="text" id="messageInput" class="form-control" 
-                                       placeholder="Type your message..." required>
-                                <button class="btn btn-primary" type="submit">
-                                    <i data-feather="send"></i>
-                                </button>
-                            </div>
-                        </form>
+        <div class="card chat-container">
+            <div class="card-body p-0 d-flex flex-column">
+                <div id="chatMessages" class="chat-messages">
+                    <div class="message system">
+                        Hello! I'm your AI travel assistant. How can I help you plan your next trip?
                     </div>
                 </div>
+                <form id="chatForm" class="chat-input">
+                    <div class="input-group">
+                        <input type="text" id="messageInput" class="form-control" 
+                               placeholder="Type your message..." required>
+                        <button class="btn btn-primary" type="submit">
+                            <i data-feather="send"></i>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -111,11 +113,12 @@
                     }
                 } else if (data.authenticated) {
                     console.log('Calendar service authenticated');
-                    calendarBtn.textContent = '✓ Calendar Connected';
+                    calendarBtn.innerHTML = '<i data-feather="check-circle"></i> Calendar Connected';
                     calendarBtn.classList.remove('btn-outline-primary');
                     calendarBtn.classList.add('btn-success');
                     calendarBtn.classList.add('disabled');
                     successDiv.style.display = 'block';
+                    feather.replace();
                 }
             } catch (error) {
                 console.error('Error checking calendar status:', error);
@@ -126,31 +129,15 @@
             }
         }
 
-        // Add click handler for calendar button
-        document.getElementById('calendarAuthBtn').addEventListener('click', function(e) {
-            console.log('Calendar auth button clicked');
-            const errorDiv = document.getElementById('calendarErrors');
-            const errorDetails = document.querySelector('.calendar-error-details');
-            const successDiv = document.getElementById('calendarSuccess');
-
-            // Clear any previous messages
-            errorDiv.style.display = 'none';
-            errorDetails.textContent = '';
-            successDiv.style.display = 'none';
-        });
-
-        // Check status when the page loads and every 5 seconds after OAuth redirect
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Page loaded, checking calendar status...');
             checkCalendarStatus();
 
-            // If we were redirected back from OAuth, check status periodically
             if (window.location.search.includes('code=')) {
                 const statusCheck = setInterval(() => {
                     checkCalendarStatus();
                 }, 5000);
 
-                // Stop checking after 30 seconds
                 setTimeout(() => {
                     clearInterval(statusCheck);
                 }, 30000);
