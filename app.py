@@ -1,3 +1,4 @@
+
 import os
 import logging
 from flask import Flask
@@ -19,12 +20,10 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
-    # Configure SQLAlchemy
+    # Configure SQLAlchemy with SQLite fallback
     logger.debug("Configuring database connection...")
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise ValueError("DATABASE_URL environment variable is required")
-
+    database_url = os.environ.get("DATABASE_URL") or "sqlite:///local.db"
+    logger.info(f"Using database: {database_url}")
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "pool_recycle": 300,
@@ -36,8 +35,7 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
 
-    # Import models after db initialization
-    from models import User
+    from models.user import User
 
     @login_manager.user_loader
     def load_user(user_id):
