@@ -81,49 +81,67 @@ def register_routes(app):
     @app.route("/api/chat", methods=["POST"])
     @login_required
     def chat():
-        """Handle user chat message to generate itinerary plan or refine it."""
+        """Handle user chat message to generate itinerary plan"""
         try:
             data = request.json
             if not data:
+                logger.error("No data provided in chat request")
                 return jsonify({
                     "status": "error",
                     "message": "No data provided"
                 }), 400
 
             message = data.get("message", "").strip()
-            user_id = str(current_user.id)
-
             if not message:
+                logger.error("Empty message in chat request")
                 return jsonify({
                     "status": "error",
                     "message": "Message cannot be empty"
                 }), 400
 
-            # Retrieve user preferences from Airtable if they exist
-            prefs = {}
+            user_id = str(current_user.id)
+            logger.debug(f"Processing chat request for user {user_id}: {message[:50]}...")
+
+            # Get user preferences
             try:
-                user_prefs = airtable_service.get_user_preferences(user_id)
-                if user_prefs:
-                    prefs = user_prefs
+                prefs = airtable_service.get_user_preferences(user_id) or {}
             except Exception as e:
-                logging.warning(f"Could not fetch preferences for {user_id}: {e}")
+                logger.warning(f"Could not fetch preferences for {user_id}: {e}")
+                prefs = {}
 
-            plan_result = generate_travel_plan(message, prefs)
+            # Generate travel plan
+            try:
+                plan_result = generate_travel_plan(message, prefs)
+                if not isinstance(plan_result, dict):
+                    logger.error(f"Invalid plan result format: {type(plan_result)}")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Invalid response format from travel planner"
+                    }), 500
 
-            # Ensure we return a properly formatted JSON response
-            if not isinstance(plan_result, dict):
+                logger.debug("Successfully generated travel plan")
+                return jsonify({
+                    "status": "success",
+                    "alternatives": [
+                        {
+                            "content": plan_result.get("content", "Error: No content generated"),
+                            "explanation": plan_result.get("explanation", "")
+                        }
+                    ]
+                })
+
+            except Exception as e:
+                logger.error(f"Error generating travel plan: {e}", exc_info=True)
                 return jsonify({
                     "status": "error",
-                    "message": "Invalid response format from travel planner"
+                    "message": f"Error generating travel plan: {str(e)}"
                 }), 500
 
-            return jsonify(plan_result)
-
         except Exception as e:
-            logger.error(f"Error in chat endpoint: {e}", exc_info=True)
+            logger.error(f"Unhandled error in chat endpoint: {e}", exc_info=True)
             return jsonify({
                 "status": "error",
-                "message": str(e)
+                "message": f"An unexpected error occurred: {str(e)}"
             }), 500
 
     @app.route("/api/chat/select", methods=["POST"])
