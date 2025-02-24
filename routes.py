@@ -13,6 +13,8 @@ def register_routes(app):
 
     # Initialize services
     airtable_service = AirtableService()
+    from services.calendar_service import CalendarService
+    calendar_service = CalendarService()
 
     @app.route("/")
     def index():
