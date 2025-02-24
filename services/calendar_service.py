@@ -1,5 +1,3 @@
-# services/calendar_service.py
-
 import os
 import logging
 import re
@@ -11,30 +9,25 @@ from googleapiclient.discovery import build
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
 class CalendarService:
-
     def __init__(self):
-        self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
-        self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
-
-        # HARD-CODE your Replit domain to match the one in Google OAuth
-        # This way, your redirect URIs always match exactly:
+        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID')
+        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET')
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
 
         logger.debug("CalendarService initialized with:")
-        logger.debug(f" - Client ID: {bool(self.client_id)}")
-        logger.debug(f" - Client Secret: {bool(self.client_secret)}")
+        logger.debug(f" - Calendar Client ID: {bool(self.client_id)}")
+        logger.debug(f" - Calendar Client Secret: {bool(self.client_secret)}")
         logger.debug(f" - Domain: {self.replit_domain}")
 
         if not all([self.client_id, self.client_secret]):
-            raise ValueError(
-                "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in env")
+            raise ValueError("Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET in env")
 
+        # Calendar-specific scopes
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
     def get_authorization_url(self):
-        """Generate the Google OAuth2 authorization URL."""
+        """Generate the Google Calendar OAuth2 authorization URL."""
         logger.debug("Generating Google Calendar auth URL...")
 
         redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
@@ -48,17 +41,17 @@ class CalendarService:
             }
         }
 
-        flow = Flow.from_client_config(client_config, scopes=self.SCOPES)
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=self.SCOPES
+        )
         flow.redirect_uri = redirect_uri
 
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
-            prompt='consent')
-
-        # Force HTTPS if needed (rarely needed, but kept for safety)
-        if authorization_url.startswith('http://'):
-            authorization_url = 'https://' + authorization_url[7:]
+            prompt='consent'
+        )
 
         return authorization_url, state
 

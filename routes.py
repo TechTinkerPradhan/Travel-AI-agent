@@ -1,5 +1,3 @@
-# routes.py
-
 import os
 import logging
 from datetime import datetime
@@ -12,12 +10,48 @@ from services.openai_service import generate_travel_plan, analyze_user_preferenc
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Instantiate services
-airtable_service = AirtableService()
-calendar_service = CalendarService()
+# Separate calendar routes from main routes
+def register_calendar_routes(app):
+    """Register calendar-specific routes with separate OAuth flow"""
+    calendar_service = CalendarService()
+
+    @app.route("/api/calendar/auth")
+    @login_required
+    def calendar_auth():
+        """Initiate Google Calendar OAuth flow with calendar-specific scopes"""
+        try:
+            auth_url, state = calendar_service.get_authorization_url()
+            session["calendar_oauth_state"] = state  # Use separate session key
+            return redirect(auth_url)
+        except Exception as e:
+            logger.error(f"Error in calendar_auth: {e}", exc_info=True)
+            return jsonify({"status":"error","message":str(e)}),500
+
+    @app.route("/api/calendar/oauth2callback")
+    @login_required
+    def calendar_oauth2callback():
+        """Handle Google's callback after user consents to Calendar access"""
+        try:
+            if "error" in request.args:
+                error_msg = request.args.get("error_description","Unknown error")
+                return jsonify({"status":"error","message":f"OAuth error: {error_msg}"}),400
+
+            state = session.get("calendar_oauth_state")  # Use calendar-specific state
+            if not state:
+                return jsonify({"status":"error","message":"Invalid OAuth state"}),400
+
+            creds = calendar_service.verify_oauth2_callback(request.url, state)
+            session["google_calendar_credentials"] = creds  # Use calendar-specific session key
+            return redirect(url_for("index"))
+        except Exception as e:
+            logger.error(f"Error in calendar_oauth2callback: {e}", exc_info=True)
+            return jsonify({"status":"error","message":str(e)}),500
 
 def register_routes(app):
-    """Register all routes with the Flask app"""
+    """Register all non-calendar routes with the Flask app"""
+
+    # Initialize services
+    airtable_service = AirtableService()
 
     @app.route("/")
     def index():
@@ -36,7 +70,7 @@ def register_routes(app):
                 return jsonify({"status":"error","message":"No data provided"}),400
 
             message = data.get("message","").strip()
-            user_id = str(current_user.id)  # Use the logged-in user's ID
+            user_id = str(current_user.id)
 
             # Retrieve user preferences from Airtable if they exist
             prefs = {}
@@ -78,74 +112,13 @@ def register_routes(app):
         """Save user preferences in Airtable."""
         try:
             data = request.json
-            user_id = str(current_user.id)  # Use the logged-in user's ID
+            user_id = str(current_user.id)
             prefs = data.get("preferences",{})
 
             airtable_service.save_user_preferences(user_id, prefs)
             return jsonify({"status":"success"})
         except Exception as e:
             logger.error(f"Error updating preferences: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
-
-    @app.route("/api/itinerary/save", methods=["POST"])
-    @login_required
-    def save_itinerary():
-        """Save a chosen itinerary to Airtable's 'Travel Itineraries' table."""
-        try:
-            data = request.json
-            if not data:
-                return jsonify({"status":"error","message":"No data provided"}),400
-
-            user_id = str(current_user.id)  # Use the logged-in user's ID
-            original_query = data.get("original_query","")
-            selected_itinerary = data.get("selected_itinerary","")
-            user_changes = data.get("user_changes","")
-
-            if not selected_itinerary:
-                return jsonify({"status":"error","message":"Missing itinerary"}),400
-
-            record = airtable_service.save_user_itinerary(
-                user_id=user_id,
-                original_query=original_query,
-                selected_itinerary=selected_itinerary,
-                user_changes=user_changes
-            )
-            return jsonify({"status":"success","record_id":record.get("id")})
-
-        except Exception as e:
-            logger.error(f"Error saving itinerary: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
-
-    @app.route("/api/calendar/auth")
-    @login_required
-    def calendar_auth():
-        """Initiate Google OAuth flow."""
-        try:
-            auth_url, state = calendar_service.get_authorization_url()
-            session["oauth_state"] = state
-            return redirect(auth_url)
-        except Exception as e:
-            logger.error(f"Error in calendar_auth: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
-
-    @app.route("/api/calendar/oauth2callback")
-    @login_required
-    def oauth2callback():
-        """Handle Google's callback after user consents to Calendar access."""
-        try:
-            if "error" in request.args:
-                error_msg = request.args.get("error_description","Unknown error")
-                return jsonify({"status":"error","message":f"OAuth error: {error_msg}"}),400
-
-            state = session.get("oauth_state")
-            if not state:
-                return jsonify({"status":"error","message":"Invalid OAuth state"}),400
-
-            creds = calendar_service.verify_oauth2_callback(request.url, state)
-            session["google_credentials"] = creds
-            return redirect(url_for("index"))
-        except Exception as e:
-            logger.error(f"Error in oauth2callback: {e}", exc_info=True)
             return jsonify({"status":"error","message":str(e)}),500
 
     @app.route("/preferences")
@@ -160,5 +133,8 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error fetching preferences: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
+
+    # Register calendar-specific routes
+    register_calendar_routes(app)
 
     return app
