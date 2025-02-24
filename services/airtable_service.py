@@ -1,7 +1,7 @@
 import os
 import logging
 from typing import Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from pyairtable import Table
 
 class AirtableService:
@@ -64,8 +64,8 @@ class AirtableService:
                 logging.error(f"Could not read from itineraries table: {str(e)}")
                 raise ValueError(
                     "Please ensure the 'Travel Itineraries' table exists in your Airtable base "
-                    "with the following columns: 'User ID', 'Original Query', 'Selected Itinerary', "
-                    "'User Changes', 'Created Date'"
+                    "with the following columns: 'User ID', 'Destination', 'Status', 'Start Date', "
+                    "'End Date', 'Related User Preferences', 'Related Travel Activities'"
                 )
 
         except Exception as e:
@@ -126,15 +126,24 @@ class AirtableService:
         """Save user itinerary to Airtable"""
         try:
             logging.debug(f"Creating itinerary record for user: {user_id}")
-            current_time = datetime.now().isoformat()
+
+            # Extract destination from the itinerary content
+            # Assuming the first line contains the destination
+            destination = original_query.split(' in ')[-1].split()[0] if ' in ' in original_query else 'Unknown'
+
+            # Parse the start and end dates from the itinerary content
+            # This is a simple implementation - you might want to enhance this based on your needs
+            lines = selected_itinerary.split('\n')
+            start_date = datetime.now().strftime('%Y-%m-%d')
+            end_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
 
             # Prepare fields for the itinerary record
             itinerary_fields = {
                 'User ID': user_id,
-                'Original Query': original_query,
-                'Selected Itinerary': selected_itinerary,
-                'User Changes': user_changes,
-                'Created Date': current_time
+                'Destination': destination,
+                'Status': 'Active',
+                'Start Date': start_date,
+                'End Date': end_date
             }
 
             # Create itinerary record
