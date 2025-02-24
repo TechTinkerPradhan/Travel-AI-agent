@@ -11,7 +11,7 @@ auth = Blueprint('auth', __name__, template_folder='../templates')
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
-REPLIT_DOMAIN = "ai-travel-buddy-bboyswagat.replit.app"
+REPLIT_DOMAIN = os.environ.get("REPLIT_DOMAIN", "ai-travel-buddy-bboyswagat.replit.app")
 
 @auth.route('/login')
 def login():
