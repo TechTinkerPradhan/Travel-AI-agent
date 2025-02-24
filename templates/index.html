@@ -51,6 +51,9 @@
                             <i data-feather="calendar"></i>
                             Connect Google Calendar
                         </a>
+                        <div id="calendarErrors" class="alert alert-danger" style="display: none;">
+                            <small class="calendar-error-details"></small>
+                        </div>
                         <small class="text-muted calendar-status-msg" style="display: none;">
                             Calendar integration is currently unavailable. Please try again later.
                         </small>
@@ -125,17 +128,27 @@
         });
         async function checkCalendarStatus() {
             try {
+                console.log('Checking calendar status...');
                 const response = await fetch('/api/calendar/status');
                 const data = await response.json();
+                console.log('Calendar status response:', data);
 
                 const calendarBtn = document.getElementById('calendarAuthBtn');
                 const statusMsg = document.querySelector('.calendar-status-msg');
+                const errorDiv = document.getElementById('calendarErrors');
+                const errorDetails = document.querySelector('.calendar-error-details');
 
                 if (!data.available) {
+                    console.error('Calendar service unavailable:', data);
                     calendarBtn.classList.add('disabled');
                     calendarBtn.setAttribute('aria-disabled', 'true');
                     statusMsg.style.display = 'block';
-                } else if (data.connected) {
+                    if (data.message) {
+                        errorDiv.style.display = 'block';
+                        errorDetails.textContent = `Error: ${data.message}`;
+                    }
+                } else if (data.authenticated) {
+                    console.log('Calendar service authenticated');
                     calendarBtn.textContent = 'Calendar Connected';
                     calendarBtn.classList.remove('btn-outline-primary');
                     calendarBtn.classList.add('btn-success');
@@ -143,11 +156,25 @@
                 }
             } catch (error) {
                 console.error('Error checking calendar status:', error);
+                const errorDiv = document.getElementById('calendarErrors');
+                const errorDetails = document.querySelector('.calendar-error-details');
+                errorDiv.style.display = 'block';
+                errorDetails.textContent = `Error checking calendar status: ${error.message}`;
             }
         }
 
+        // Add click handler for calendar button
+        document.getElementById('calendarAuthBtn').addEventListener('click', function(e) {
+            console.log('Calendar auth button clicked');
+            const errorDiv = document.getElementById('calendarErrors');
+            const errorDetails = document.querySelector('.calendar-error-details');
+            errorDiv.style.display = 'none';
+            errorDetails.textContent = '';
+        });
+
         // Call this when the page loads
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, checking calendar status...');
             checkCalendarStatus();
         });
     </script>

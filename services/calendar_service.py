@@ -274,3 +274,13 @@ class CalendarService:
             })
 
         return days
+
+    def get_configuration_error(self):
+        """Get detailed error message about configuration issues"""
+        if not self.client_id:
+            return "Google Calendar Client ID is missing"
+        if not self.client_secret:
+            return "Google Calendar Client Secret is missing"
+        if not self.client_id.endswith('.apps.googleusercontent.com'):
+            return "Invalid Google Calendar Client ID format"
+        return "Unknown configuration error"

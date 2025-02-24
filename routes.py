@@ -31,14 +31,30 @@ def register_routes(app):
             is_available = calendar_service.check_availability()
             is_authenticated = 'google_calendar_credentials' in session
 
+            if not is_available:
+                error_msg = "Calendar service configuration error - Please check credentials"
+                logger.error(error_msg)
+                return jsonify({
+                    "status": "error",
+                    "available": False,
+                    "message": error_msg,
+                    "authenticated": False
+                })
+
             return jsonify({
                 "status": "success",
                 "available": is_available,
                 "authenticated": is_authenticated
             })
         except Exception as e:
-            logger.error(f"Error checking calendar status: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            error_msg = f"Error checking calendar status: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": error_msg,
+                "available": False,
+                "authenticated": False
+            }), 500
 
     @app.route("/api/calendar/auth")
     @login_required
@@ -46,9 +62,11 @@ def register_routes(app):
         """Initiate Google Calendar OAuth flow"""
         try:
             if not calendar_service.check_availability():
+                error_msg = calendar_service.get_configuration_error()
+                logger.error(f"Calendar auth failed: {error_msg}")
                 return jsonify({
                     "status": "error",
-                    "message": "Calendar service is not configured properly"
+                    "message": error_msg
                 }), 503
 
             authorization_url, state = calendar_service.get_authorization_url()
@@ -56,8 +74,9 @@ def register_routes(app):
             logger.debug(f"Redirecting to authorization URL: {authorization_url}")
             return redirect(authorization_url)
         except Exception as e:
-            logger.error(f"Error in calendar auth: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            error_msg = f"Error in calendar auth: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return jsonify({"status": "error", "message": error_msg}), 500
 
     @app.route("/api/chat", methods=["POST"])
     @login_required
@@ -98,7 +117,7 @@ def register_routes(app):
 
             content = data.get("content")
             original_query = data.get("original_query")
-            
+
             if not content or not original_query:
                 return jsonify({"status": "error", "message": "Missing content or original query"}), 400
 
