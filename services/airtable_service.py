@@ -23,9 +23,9 @@ class AirtableService:
         # Clean up base ID - remove any trailing paths or slashes
         self.base_id = self.base_id.split('/')[0].strip()
 
-        # Define table names
+        # Define table names and schemas
         self.USER_PREFERENCES = "User Preferences"
-        self.ITINERARIES = "Itineraries"  # Add table name for itineraries
+        self.ITINERARIES = "Travel Itineraries"  # Changed table name to be more descriptive
 
         # Try to initialize and test the connection
         self._test_connection()
@@ -34,25 +34,43 @@ class AirtableService:
         """Test connection to Airtable and print table information"""
         try:
             # Initialize tables
-            logging.info(f"Attempting to connect to table: {self.USER_PREFERENCES}")
+            logging.info(f"Attempting to connect to tables")
             self.preferences_table = Table(self.access_token, self.base_id, self.USER_PREFERENCES)
             self.itineraries_table = Table(self.access_token, self.base_id, self.ITINERARIES)
 
-            # Try to list records
+            # Try to list records from preferences table
             logging.info("Attempting to list records and get schema...")
-            records = self.preferences_table.all(max_records=1)
+            try:
+                records = self.preferences_table.all(max_records=1)
+                if records:
+                    field_names = list(records[0]['fields'].keys())
+                    logging.info(f"Available fields in preferences table: {field_names}")
+                    logging.info(f"Total records found: {len(records)}")
+                    logging.info(f"Sample record (fields only): {records[0]['fields']}")
+                else:
+                    logging.info("Preferences table exists but no records found")
+            except Exception as e:
+                logging.warning(f"Could not read from preferences table: {str(e)}")
 
-            if records:
-                field_names = list(records[0]['fields'].keys())
-                logging.info(f"Available fields in table: {field_names}")
-                logging.info(f"Total records found: {len(records)}")
-                logging.info(f"Sample record (fields only): {records[0]['fields']}")
-            else:
-                logging.info("Table exists but no records found")
+            # Try to list records from itineraries table
+            try:
+                itinerary_records = self.itineraries_table.all(max_records=1)
+                if itinerary_records:
+                    field_names = list(itinerary_records[0]['fields'].keys())
+                    logging.info(f"Available fields in itineraries table: {field_names}")
+                else:
+                    logging.info("Itineraries table exists but no records found")
+            except Exception as e:
+                logging.error(f"Could not read from itineraries table: {str(e)}")
+                raise ValueError(
+                    "Please ensure the 'Travel Itineraries' table exists in your Airtable base "
+                    "with the following columns: 'User ID', 'Original Query', 'Selected Itinerary', "
+                    "'User Changes', 'Created Date'"
+                )
 
         except Exception as e:
             logging.error(f"Airtable connection error: {str(e)}")
-            logging.error(f"Connection attempted with: base_id={self.base_id}, table={self.USER_PREFERENCES}")
+            logging.error(f"Connection attempted with: base_id={self.base_id}")
             raise ValueError(f"Failed to connect to Airtable: {str(e)}")
 
     def save_user_preferences(self, user_id: str, preferences: Dict) -> Dict:
