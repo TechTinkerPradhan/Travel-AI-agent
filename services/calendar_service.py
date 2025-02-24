@@ -11,21 +11,21 @@ logger = logging.getLogger(__name__)
 
 class CalendarService:
     def __init__(self):
-        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID')
-        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET')
+        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
+        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
         self.is_available = False
 
         logger.debug("CalendarService initialization attempt:")
-        logger.debug(f" - Calendar Client ID present: {bool(self.client_id)}")
-        logger.debug(f" - Calendar Client Secret present: {bool(self.client_secret)}")
+        logger.debug(f" - Calendar Client ID: {self.client_id[:8]}... (length: {len(self.client_id)})")
+        logger.debug(f" - Calendar Secret length: {len(self.client_secret)}")
         logger.debug(f" - Domain: {self.replit_domain}")
 
-        if all([self.client_id, self.client_secret]):
+        if self.client_id and self.client_secret and len(self.client_id) > 20 and len(self.client_secret) > 20:
             self.is_available = True
             logger.info("Calendar service initialized successfully")
         else:
-            logger.warning("Calendar service unavailable - missing credentials")
+            logger.warning("Calendar service unavailable - invalid or missing credentials")
 
         # Calendar-specific scopes only
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
