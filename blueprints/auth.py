@@ -30,6 +30,13 @@ def login():
 
 @auth.route('/google_login')
 def google_login():
+    # Strictly use only authentication scopes, no calendar scopes
+    auth_scopes = [
+        'openid',
+        'email',
+        'profile'
+    ]
+
     flow = Flow.from_client_config(
         {
             "web": {
@@ -40,8 +47,7 @@ def google_login():
                 "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
             }
         },
-        # Keep only authentication scopes, remove calendar scopes
-        scopes=['openid', 'email', 'profile']
+        scopes=auth_scopes  # Use auth-only scopes
     )
 
     # Set the redirect URI using the configured domain
@@ -49,7 +55,7 @@ def google_login():
 
     authorization_url, state = flow.authorization_url(
         access_type='offline',
-        include_granted_scopes='true',
+        include_granted_scopes='false',  # Don't include additional scopes
         prompt='consent'
     )
 
@@ -64,6 +70,9 @@ def google_callback():
         return "Invalid state parameter", 400
 
     try:
+        # Use the same auth-only scopes as in google_login
+        auth_scopes = ['openid', 'email', 'profile']
+
         flow = Flow.from_client_config(
             {
                 "web": {
@@ -74,7 +83,7 @@ def google_callback():
                     "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
                 }
             },
-            scopes=['openid', 'email', 'profile'],
+            scopes=auth_scopes,  # Use auth-only scopes
             state=state
         )
 
