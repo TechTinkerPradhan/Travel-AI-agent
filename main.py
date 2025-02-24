@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask
+from flask import Flask, jsonify
 from routes import register_routes
 
 # Set up logging
@@ -14,6 +14,18 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
+
+# Register error handlers
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Return JSON instead of HTML for any error"""
+    logging.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.errorhandler(404)
+def not_found(e):
+    """Return JSON instead of HTML for HTTP 404"""
+    return jsonify({"status": "error", "message": "Resource not found"}), 404
 
 # Register routes
 register_routes(app)

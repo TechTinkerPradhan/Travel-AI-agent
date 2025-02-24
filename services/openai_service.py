@@ -21,117 +21,85 @@ agent_registry = AgentRegistry()
 
 def generate_travel_plan(message, user_preferences):
     """
-    Generate multiple travel recommendations using OpenAI's API with specialized agents
+    Generate multiple travel recommendations using OpenAI's API
     """
     max_retries = 5
     base_delay = 3
 
-    for attempt in range(max_retries):
-        try:
-            logger.debug("Starting travel plan generation")
-            logger.debug(f"Message: {message}")
-            logger.debug(f"User preferences: {user_preferences}")
+    try:
+        logger.debug("Starting travel plan generation")
+        logger.debug(f"Message: {message}")
+        logger.debug(f"User preferences: {user_preferences}")
 
-            # Get the most appropriate agent for the query
-            agent = agent_registry.get_best_agent_for_query(message)
-            logger.debug(f"Selected agent role: {agent.role.value}")
-            logger.debug(f"Agent temperature: {agent.temperature}")
+        # Prepare context with user preferences
+        preferences_context = "\n".join([
+            f"{key}: {value}" 
+            for key, value in user_preferences.items()
+            if value
+        ])
+        logger.debug(f"User preferences context: {preferences_context}")
 
-            # Prepare context with user preferences
-            preferences_context = "\n".join([
-                f"{key}: {value}" 
-                for key, value in user_preferences.items()
-                if value
-            ])
-            logger.debug(f"User preferences context: {preferences_context}")
+        system_prompt = """You are a travel planning assistant. Provide responses in a well-formatted structure with:
+        - Clear headings using markdown (##)
+        - Each day's activities clearly marked with '## Day X: [Title]'
+        - Time-specific activities in 24-hour format (e.g., 09:00)
+        - Location information in bold text
+        - Duration estimates in parentheses
+        - Bullet points for individual activities
+        """
 
-            # Generate two alternative responses with slightly different temperatures
-            responses = []
-            for temp_adjustment in [-0.1, 0.1]:
-                adjusted_temp = max(0.1, min(1.0, agent.temperature + temp_adjustment))
-                logger.debug(f"Generating response with temperature: {adjusted_temp}")
+        full_prompt = f"""User preferences: {preferences_context}
+        User message: {message}
 
-                system_prompt = f"""{agent.system_prompt}
-                Additionally, provide your response in a well-formatted structure with:
-                - Clear headings using markdown (##)
-                - Each day's activities clearly marked with '## Day X: [Title]'
-                - Time-specific activities in 24-hour format (e.g., 09:00)
-                - Location information in bold text
-                - Duration estimates in parentheses
-                - Bullet points for individual activities
-                """
+        Provide a detailed travel recommendation.
+        Structure each day's activities with specific times and durations.
+        Consider:
+        1. User's specific request and preferences
+        2. Practical implementation details
+        3. Cost considerations where applicable
+        """
 
-                full_prompt = f"""User preferences: {preferences_context}
-                User message: {message}
+        logger.debug("Making OpenAI API call")
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": full_prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.7
+        )
 
-                Provide a unique travel recommendation as a {agent.role.value} specialist.
-                Focus on a different aspect or approach than any previous response.
-                Structure each day's activities with specific times and durations.
-                Consider:
-                1. User's specific request and preferences
-                2. Your specialized domain knowledge
-                3. Practical implementation details
-                4. Cost considerations where applicable
-                """
+        content = response.choices[0].message.content
+        logger.debug(f"Received response (length: {len(content)})")
 
-                logger.debug(f"Making OpenAI API call for response {len(responses) + 1}")
-                try:
-                    response = client.chat.completions.create(
-                        model="gpt-4",
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": full_prompt}
-                        ],
-                        max_tokens=2000,
-                        temperature=adjusted_temp
-                    )
+        # Format the response as JSON
+        formatted_response = {
+            "status": "success",
+            "alternatives": [
+                {
+                    "id": "option_1",
+                    "content": content,
+                    "type": "itinerary"
+                }
+            ]
+        }
 
-                    content = response.choices[0].message.content
-                    logger.debug(f"Received response {len(responses) + 1} (length: {len(content)})")
-                    logger.debug(f"Response content preview: {content[:200]}...")
-                    responses.append(content)
+        # Verify JSON serialization
+        json.dumps(formatted_response)  # This will raise an error if not JSON serializable
+        return formatted_response
 
-                except APIError as api_error:
-                    logger.error(f"OpenAI API error: {str(api_error)}")
-                    raise Exception(f"OpenAI API error: {str(api_error)}")
-                except APIConnectionError as conn_error:
-                    logger.error(f"OpenAI API connection error: {str(conn_error)}")
-                    raise Exception("Unable to connect to OpenAI API. Please try again later.")
-
-            # Format the responses for presentation
-            formatted_response = {
-                "status": "success",
-                "agent_type": agent.role.value,
-                "alternatives": [
-                    {
-                        "id": f"option_{i+1}",
-                        "content": response,
-                        "type": "itinerary"  # Mark as itinerary for frontend processing
-                    }
-                    for i, response in enumerate(responses)
-                ]
-            }
-            logger.debug(f"Formatted final response with {len(formatted_response['alternatives'])} alternatives")
-            logger.debug(f"Response structure: {formatted_response.keys()}")
-            return formatted_response
-
-        except RateLimitError as e:
-            logger.error(f"Rate limit error on attempt {attempt + 1}: {str(e)}")
-            if attempt == max_retries - 1:
-                raise Exception(
-                    "We're experiencing high traffic. Please wait 30 seconds and try again. "
-                    "This helps ensure a better response when you retry."
-                )
-
-            jitter = random.uniform(1, 3)
-            delay = (base_delay * (2 ** attempt)) + jitter
-            logger.info(f"Rate limit hit, waiting {delay:.2f} seconds before retry")
-            time.sleep(delay)
-            continue
-
-        except Exception as e:
-            logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
-            raise Exception(f"Failed to generate travel plan: {str(e)}")
+    except RateLimitError as e:
+        logger.error(f"Rate limit error: {str(e)}")
+        raise Exception(
+            "We're experiencing high traffic. Please wait 30 seconds and try again."
+        )
+    except (APIError, APIConnectionError) as e:
+        logger.error(f"OpenAI API error: {str(e)}")
+        raise Exception(f"Failed to generate travel plan: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
+        raise Exception(f"Failed to generate travel plan: {str(e)}")
 
 def analyze_user_preferences(query: str, selected_response: str):
     """
