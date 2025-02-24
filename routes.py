@@ -20,14 +20,8 @@ def register_routes(app):
     @app.route("/")
     def index():
         """Show login page if not authenticated, otherwise show main app"""
-        if current_user.is_authenticated:
-            return render_template("app.html")
-        return render_template("login.html")
-
-    @app.route("/app")
-    @login_required
-    def app_page():
-        """Show the main application page"""
+        if not current_user.is_authenticated:
+            return render_template("login.html")
         return render_template("index.html")
 
     @app.route("/api/calendar/status")
