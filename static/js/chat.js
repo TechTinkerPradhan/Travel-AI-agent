@@ -149,56 +149,124 @@ document.addEventListener('DOMContentLoaded', function() {
             const saveData = await saveResponse.json();
             if (saveData.status === 'success') {
                 // Create a dialog to select start date and preview events
-                const dialog = document.createElement('div');
-                dialog.className = 'modal fade';
-                dialog.innerHTML = `
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Schedule Itinerary Events</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <form id="scheduleForm">
-                                    <div class="mb-3">
-                                        <label for="startDate" class="form-label">Start Date for Itinerary</label>
-                                        <input type="date" class="form-control" id="startDate" required
-                                               min="${new Date().toISOString().split('T')[0]}">
-                                    </div>
-                                    <div id="eventsPreview" class="mt-4">
-                                        <h6>Events Preview:</h6>
-                                        <div class="events-list"></div>
-                                    </div>
-                                </form>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-primary" id="confirmSchedule">
-                                    <i data-feather="calendar"></i> Add to Calendar
-                                </button>
+                const modalHtml = `
+                    <div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="scheduleModalLabel">Schedule Itinerary Events</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <form id="scheduleForm">
+                                        <div class="mb-3">
+                                            <label for="startDate" class="form-label">Start Date for Itinerary</label>
+                                            <input type="date" class="form-control" id="startDate" required
+                                                   min="${new Date().toISOString().split('T')[0]}">
+                                        </div>
+                                        <div id="eventsPreview" class="mt-4">
+                                            <h6>Events Preview:</h6>
+                                            <div class="events-list"></div>
+                                        </div>
+                                    </form>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary" id="confirmSchedule">
+                                        <i data-feather="calendar"></i> Add to Calendar
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 `;
 
-                document.body.appendChild(dialog);
-                const modal = new bootstrap.Modal(dialog);
+                // Remove any existing modal
+                const existingModal = document.getElementById('scheduleModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+
+                // Add the modal to the document
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                // Get the modal element
+                const modalElement = document.getElementById('scheduleModal');
+
+                // Initialize Bootstrap modal
+                const modal = new bootstrap.Modal(modalElement);
+
+                // Show the modal
                 modal.show();
 
                 // Preview events when date is selected
                 document.getElementById('startDate').addEventListener('change', async (e) => {
-                    await updateEventsPreview(finalItinerary, e.target.value, dialog);
+                    await updateEventsPreview(finalItinerary, e.target.value);
                 });
 
                 // Handle schedule confirmation
                 document.getElementById('confirmSchedule').addEventListener('click', async () => {
-                    await handleScheduleConfirmation(finalItinerary, dialog);
+                    const startDate = document.getElementById('startDate').value;
+                    if (!startDate) {
+                        alert('Please select a start date');
+                        return;
+                    }
+
+                    try {
+                        const confirmBtn = document.getElementById('confirmSchedule');
+                        confirmBtn.disabled = true;
+                        confirmBtn.innerHTML = '<i data-feather="loader"></i> Adding to Calendar...';
+                        feather.replace();
+
+                        // Check calendar auth status
+                        const statusResponse = await fetch('/api/calendar/status');
+                        const statusData = await statusResponse.json();
+
+                        if (!statusData.authenticated) {
+                            // Store the current state before redirecting
+                            sessionStorage.setItem('pendingCalendarItinerary', JSON.stringify({
+                                itinerary: finalItinerary,
+                                startDate: startDate
+                            }));
+                            window.location.href = '/api/calendar/auth';
+                            return;
+                        }
+
+                        const response = await fetch('/api/calendar/event', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                itinerary_content: finalItinerary,
+                                start_date: startDate
+                            })
+                        });
+
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            addMessage('Successfully added itinerary to your Google Calendar!');
+                            modal.hide();
+                        } else {
+                            addMessage('Failed to add itinerary to calendar: ' + data.message, false, true);
+                            confirmBtn.disabled = false;
+                            confirmBtn.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+                            feather.replace();
+                        }
+                    } catch (error) {
+                        console.error('Error creating calendar events:', error);
+                        addMessage('Error scheduling itinerary: ' + error.message, false, true);
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<i data-feather="calendar"></i> Add to Calendar';
+                        feather.replace();
+                    }
                 });
 
-                // Clean up when dialog is closed
-                dialog.addEventListener('hidden.bs.modal', () => {
-                    dialog.remove();
+                // Clean up when modal is hidden
+                modalElement.addEventListener('hidden.bs.modal', () => {
+                    modalElement.remove();
                 });
+
             } else {
                 addMessage('Failed to save itinerary: ' + saveData.message, false, true);
             }
@@ -208,7 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function updateEventsPreview(itinerary, startDate, dialog) {
+    async function updateEventsPreview(itinerary, startDate) {
         try {
             const response = await fetch('/api/calendar/preview', {
                 method: 'POST',
@@ -223,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
             if (data.status === 'success') {
-                const eventsList = dialog.querySelector('.events-list');
+                const eventsList = document.querySelector('#scheduleModal .events-list');
                 eventsList.innerHTML = data.preview.map(event => `
                     <div class="card mb-2">
                         <div class="card-body">
@@ -244,8 +312,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function handleScheduleConfirmation(itinerary, dialog) {
-        const startDate = document.getElementById('startDate').value;
+    async function handleScheduleConfirmation(itinerary, startDate) {
         if (!startDate) {
             alert('Please select a start date');
             return;
@@ -285,8 +352,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (data.status === 'success') {
                 addMessage('Successfully added itinerary to your Google Calendar!');
-                modal.hide();
-                dialog.remove();
             } else {
                 addMessage('Failed to add itinerary to calendar: ' + data.message, false, true);
                 confirmBtn.disabled = false;
@@ -503,8 +568,6 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             console.log("Sending chat request:", message);
 
-            // If we're in refinement mode, treat this as a refinement request
-            // This part is removed because refinement is now handled within the refinePlan function
 
             //Regular message sending
             const response = await fetch('/api/chat', {
