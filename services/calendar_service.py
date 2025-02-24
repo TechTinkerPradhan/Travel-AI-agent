@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class CalendarService:
     def __init__(self):
         """Initialize Google Calendar OAuth configuration"""
-        # Use environment variables without default values to ensure they are required
-        self.client_id = os.environ['GOOGLE_CALENDAR_CLIENT_ID']
-        self.client_secret = os.environ['GOOGLE_CALENDAR_CLIENT_SECRET']
+        # Use .get() to avoid KeyError
+        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
+        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
 
         # Check if credentials exist and log more details for debugging
