@@ -41,8 +41,8 @@ class CalendarService:
 
         logger.debug("Generating Google Calendar auth URL...")
 
-        # Calendar-specific callback URL
-        redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+        # Use the same callback URL pattern as auth
+        redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
 
         client_config = {
             "web": {
@@ -73,7 +73,8 @@ class CalendarService:
         if not self.is_available:
             raise ValueError("Calendar service is not configured - missing credentials")
 
-        redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
+        # Use the same callback URL pattern as auth
+        redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
 
         client_config = {
             "web": {

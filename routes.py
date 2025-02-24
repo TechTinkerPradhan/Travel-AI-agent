@@ -46,32 +46,31 @@ def register_calendar_routes(app):
             logger.error(f"Error in calendar_auth: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
-    @app.route("/api/calendar/oauth2callback")
-    @login_required
-    def calendar_oauth2callback():
-        """Handle Google's callback after user consents to Calendar access"""
-        logger.debug("Calendar OAuth callback endpoint called")
-        try:
-            if not calendar_service.check_availability():
-                return jsonify({
-                    "status": "error",
-                    "message": "Calendar integration is not configured. Please try again later."
-                }), 503
+    @app.route("/auth/google_callback")
+    def oauth2_callback():
+        """Handle Google's callback for both auth and calendar"""
+        logger.debug("OAuth callback endpoint called")
 
-            if "error" in request.args:
-                error_msg = request.args.get("error_description", "Unknown error")
-                return jsonify({"status": "error", "message": f"OAuth error: {error_msg}"}), 400
+        # Check if this is a calendar callback
+        calendar_state = session.get("calendar_oauth_state")
+        if calendar_state:
+            try:
+                if not calendar_service.check_availability():
+                    return jsonify({
+                        "status": "error",
+                        "message": "Calendar integration is not configured"
+                    }), 503
 
-            state = session.get("calendar_oauth_state")  # Use calendar-specific state
-            if not state:
-                return jsonify({"status": "error", "message": "Invalid OAuth state"}), 400
+                creds = calendar_service.verify_oauth2_callback(request.url, calendar_state)
+                session["google_calendar_credentials"] = creds
+                session.pop("calendar_oauth_state", None)  # Clear the state
+                return redirect(url_for("index"))
+            except Exception as e:
+                logger.error(f"Error in calendar callback: {e}", exc_info=True)
+                return jsonify({"status": "error", "message": str(e)}), 500
 
-            creds = calendar_service.verify_oauth2_callback(request.url, state)
-            session["google_calendar_credentials"] = creds  # Use calendar-specific session key
-            return redirect(url_for("index"))
-        except Exception as e:
-            logger.error(f"Error in calendar_oauth2callback: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+        # Otherwise, treat as auth callback
+        return auth.google_callback()
 
     logger.debug("Calendar routes registered successfully")
 

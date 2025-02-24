@@ -27,7 +27,7 @@ def google_login():
     Uses only authentication scopes: 'openid', 'email', 'profile'
     """
     # Auth-specific callback URL
-    redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google/callback"
+    redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
 
     # Strictly use only authentication scopes
     auth_scopes = [
@@ -60,7 +60,7 @@ def google_login():
     session['oauth_state'] = state
     return redirect(authorization_url)
 
-@auth.route('/google/callback')  # Changed from /google_callback
+@auth.route('/google_callback')
 def google_callback():
     """
     Google OAuth callback for authentication only.
@@ -73,7 +73,7 @@ def google_callback():
     try:
         # Use the same authentication-only scopes
         auth_scopes = ['openid', 'email', 'profile']
-        redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google/callback"
+        redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
 
         flow = Flow.from_client_config(
             {
