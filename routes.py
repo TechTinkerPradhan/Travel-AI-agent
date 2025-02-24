@@ -104,19 +104,33 @@ def register_routes(app):
 
             user_id = str(current_user.id)
             logger.debug(f"Processing {'refinement' if is_refinement else 'chat'} request for user {user_id}")
-            logger.debug(f"Message: {message[:50]}...")
+            logger.debug(f"Message: {message[:100]}...")
+            if is_refinement:
+                logger.debug(f"Previous response length: {len(previous_response)}")
 
-            # Get user preferences (empty for development)
-            prefs = {}
+            # Get user preferences from Airtable
+            try:
+                prefs = airtable_service.get_user_preferences(user_id) or {}
+                logger.debug(f"Retrieved user preferences: {prefs}")
+            except Exception as e:
+                logger.warning(f"Failed to get user preferences: {e}")
+                prefs = {}
 
             # Generate travel plan
             try:
                 # If this is a refinement, include the previous response in the context
                 if is_refinement:
                     logger.debug("Processing refinement request")
-                    message = f"Please refine the following travel plan based on this feedback: {message}\n\nPrevious plan:\n{previous_response}"
+                    message = f"""Please refine the following travel plan based on this feedback:
+                Feedback: {message}
 
-                logger.debug(f"Calling OpenAI service with message: {message[:100]}...")
+                Previous plan:
+                {previous_response}
+
+                Please keep the same format but adjust the plan according to the feedback.
+                """
+
+                logger.debug(f"Calling OpenAI service with message length: {len(message)}")
                 plan_result = generate_travel_plan(message, prefs)
 
                 if not isinstance(plan_result, dict):

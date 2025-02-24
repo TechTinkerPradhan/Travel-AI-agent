@@ -21,7 +21,7 @@ def generate_travel_plan(message, user_preferences):
     """
     try:
         logger.debug("Starting travel plan generation")
-        logger.debug(f"Message: {message}")
+        logger.debug(f"Message length: {len(message)}")
         logger.debug(f"User preferences: {user_preferences}")
 
         # Prepare context with user preferences
@@ -42,21 +42,28 @@ def generate_travel_plan(message, user_preferences):
         - Duration estimates in parentheses
         - Bullet points using '-' for individual activities
 
-        Separate the two plans with '---' on its own line.
+        Format requirements:
+        1. Use '---' on its own line to separate the two plans
+        2. Ensure each day's activities are properly spaced and formatted
+        3. Include specific times and durations for all activities
+        4. Use consistent markdown formatting throughout
         """
 
         full_prompt = f"""User preferences: {preferences_context}
         User message: {message}
 
         Provide TWO distinct travel plans that cater to different aspects of the trip.
+        Make each plan detailed and practical, with clear timings and locations.
         """
 
         logger.debug("Making OpenAI API call")
         max_retries = 3
         retry_count = 0
+        last_error = None
 
         while retry_count < max_retries:
             try:
+                logger.debug(f"Attempt {retry_count + 1} of {max_retries}")
                 response = client.chat.completions.create(
                     model="gpt-4",
                     messages=[
@@ -74,9 +81,14 @@ def generate_travel_plan(message, user_preferences):
                 plans = content.split('---')
                 if len(plans) != 2:
                     logger.warning("OpenAI didn't return two plans, attempting to split content")
-                    # Fallback: split content in half
-                    mid = len(content) // 2
-                    plans = [content[:mid], content[mid:]]
+                    # Try to find natural break points in the content
+                    if "Option 2:" in content:
+                        plans = content.split("Option 2:")
+                        plans[1] = "Option 2:" + plans[1]
+                    else:
+                        # Fallback: split content in half
+                        mid = len(content) // 2
+                        plans = [content[:mid], content[mid:]]
 
                 # Format the response
                 formatted_response = {
@@ -91,12 +103,16 @@ def generate_travel_plan(message, user_preferences):
                     ]
                 }
 
+                logger.debug("Successfully formatted response")
                 return formatted_response
 
-            except RateLimitError:
+            except RateLimitError as e:
+                last_error = e
                 retry_count += 1
                 if retry_count == max_retries:
-                    raise
+                    logger.error("Rate limit reached, max retries exceeded")
+                    raise Exception("Rate limit exceeded, please try again later")
+                logger.warning(f"Rate limit hit, waiting {2 ** retry_count} seconds")
                 time.sleep(2 ** retry_count)  # Exponential backoff
 
             except (APIError, APIConnectionError) as e:
@@ -109,6 +125,8 @@ def generate_travel_plan(message, user_preferences):
 
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
+        if last_error:
+            logger.error(f"Last error before failure: {str(last_error)}")
         raise Exception(f"Failed to generate travel plan: {str(e)}")
 
 def analyze_user_preferences(query: str, selected_response: str):
