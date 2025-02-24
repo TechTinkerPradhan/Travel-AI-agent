@@ -54,10 +54,86 @@
     margin-bottom: 1rem;
     width: 100%;
     max-width: 100%;
+    padding: 1.5rem;
 }
 
 .response-option:hover {
     border-color: var(--bs-primary);
+}
+
+/* Day Header Styling */
+.day-header {
+    border-bottom: 1px solid var(--bs-border-color);
+    padding-bottom: 0.5rem;
+}
+
+.day-header h5 {
+    margin: 0;
+    color: var(--bs-primary);
+    font-weight: 600;
+}
+
+/* Time Entry Styling */
+.time-entry {
+    padding: 0.5rem 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.time-entry .time {
+    color: var(--bs-info);
+    font-family: monospace;
+    font-weight: 600;
+    min-width: 60px;
+}
+
+/* Location and Duration Tags */
+.location, .duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--bs-dark);
+    border-radius: 0.25rem;
+    margin: 0 0.5rem;
+    font-size: 0.9rem;
+}
+
+.location i, .duration i {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2.5;
+}
+
+.location {
+    color: var(--bs-warning);
+}
+
+.duration {
+    color: var(--bs-info);
+}
+
+/* Activity Item Styling */
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--bs-border-color-subtle);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-item i {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2.5;
+    color: var(--bs-primary);
+    flex-shrink: 0;
+    margin-top: 0.2rem;
 }
 
 .response-option h2 {
