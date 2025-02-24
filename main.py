@@ -20,11 +20,8 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
-    # Configure SQLAlchemy - try both environment variable names
-    database_url = os.environ.get("SQLALCHEMY_DATABASE_URI") or os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise ValueError("Database URL not found in environment variables. Set either SQLALCHEMY_DATABASE_URI or DATABASE_URL")
-
+    # Configure SQLAlchemy with SQLite fallback
+    database_url = os.environ.get("SQLALCHEMY_DATABASE_URI") or os.environ.get("DATABASE_URL") or "sqlite:///local.db"
     logger.debug("Configuring database...")
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {

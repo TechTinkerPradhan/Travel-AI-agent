@@ -19,19 +19,10 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("SESSION_SECRET")
 
-    # Configure SQLAlchemy with fallback
+    # Configure SQLAlchemy with SQLite fallback
     logger.debug("Configuring database connection...")
-    database_url = os.environ.get("SQLALCHEMY_DATABASE_URI") or os.environ.get("DATABASE_URL")
-
-    if not database_url:
-        error_msg = (
-            "Database URL not found in environment variables. "
-            "Please ensure either SQLALCHEMY_DATABASE_URI or DATABASE_URL is set."
-        )
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    logger.info(f"Using database configuration from environment variables")
+    database_url = os.environ.get("SQLALCHEMY_DATABASE_URI") or os.environ.get("DATABASE_URL") or "sqlite:///local.db"
+    logger.info(f"Using database: {database_url}")
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "pool_recycle": 300,
