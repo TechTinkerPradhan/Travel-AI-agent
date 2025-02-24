@@ -144,17 +144,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     user_id: userId
                 })
             });
+
+            // Check if response is ok and content-type is json
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Server returned non-JSON response");
+            }
+
             const data = await response.json();
             loadingMsg.remove();
 
             if (data.status === 'success') {
-                addMessage(data); // This shows the new itinerary options again
+                addMessage(data);
             } else {
                 addMessage('Error refining plan: ' + data.message, false, true);
             }
         } catch (error) {
             loadingMsg.remove();
             addMessage('Error refining plan: ' + error.message, false, true);
+            console.error('Refinement error:', error);
         }
     }
 
@@ -393,6 +405,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: userMessage, user_id: userId })
             });
+
+            // Check if response is ok and content-type is json
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("Server returned non-JSON response");
+            }
+
             const data = await response.json();
             loadingMessage.remove();
 
@@ -403,6 +426,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (err) {
             loadingMessage.remove();
+            console.error('Chat error:', err);
             addMessage('Error: ' + err.message, false, true);
         }
     });

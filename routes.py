@@ -85,10 +85,19 @@ def register_routes(app):
         try:
             data = request.json
             if not data:
-                return jsonify({"status": "error", "message": "No data provided"}), 400
+                return jsonify({
+                    "status": "error",
+                    "message": "No data provided"
+                }), 400
 
             message = data.get("message", "").strip()
             user_id = str(current_user.id)
+
+            if not message:
+                return jsonify({
+                    "status": "error",
+                    "message": "Message cannot be empty"
+                }), 400
 
             # Retrieve user preferences from Airtable if they exist
             prefs = {}
@@ -100,11 +109,22 @@ def register_routes(app):
                 logging.warning(f"Could not fetch preferences for {user_id}: {e}")
 
             plan_result = generate_travel_plan(message, prefs)
+
+            # Ensure we return a properly formatted JSON response
+            if not isinstance(plan_result, dict):
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid response format from travel planner"
+                }), 500
+
             return jsonify(plan_result)
 
         except Exception as e:
             logger.error(f"Error in chat endpoint: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            return jsonify({
+                "status": "error",
+                "message": str(e)
+            }), 500
 
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
