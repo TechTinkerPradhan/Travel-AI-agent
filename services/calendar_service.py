@@ -328,22 +328,33 @@ class CalendarService:
                 day_date = start_date + timedelta(days=day['day_number'] - 1)
 
                 for activity in day['activities']:
-                    duration_text = f"{activity['duration']} minutes"
-                    if activity['duration'] >= 60:
-                        hours = activity['duration'] // 60
-                        minutes = activity['duration'] % 60
+                    # Format duration text
+                    duration = activity['duration']
+                    if duration >= 60:
+                        hours = duration // 60
+                        minutes = duration % 60
                         duration_text = f"{hours} hour{'s' if hours > 1 else ''}"
                         if minutes:
                             duration_text += f" {minutes} min{'s' if minutes > 1 else ''}"
+                    else:
+                        duration_text = f"{duration} minute{'s' if duration > 1 else ''}"
+
+                    # Clean up the description by removing markdown and duration info
+                    description = activity['description']
+                    if activity['location']:
+                        # Remove the location from description if it exists
+                        description = description.replace(f"**{activity['location']}**", "").strip()
+                    # Remove any remaining markdown or duration info
+                    description = re.sub(r'\*\*|\(\d+[^)]*\)', '', description).strip()
 
                     # Format the event details
                     preview_events.append({
-                        'description': activity['description'].strip(),
+                        'day_number': day['day_number'],
+                        'day_title': day['title'],
+                        'description': description,
                         'location': activity['location'],
                         'start_time': activity['time'],
-                        'duration': duration_text,
-                        'day_number': day['day_number'],
-                        'day_title': day['title']
+                        'duration': duration_text
                     })
 
             logger.debug(f"Generated {len(preview_events)} preview events")

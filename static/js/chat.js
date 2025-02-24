@@ -306,15 +306,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         `;
                     }
 
+                    // Add event card
                     eventsHtml += `
                         <div class="card mb-2">
                             <div class="card-body">
-                                <h6 class="card-title">${event.description}</h6>
-                                <div class="text-muted">
-                                    <small>
-                                        <i data-feather="clock"></i> ${event.start_time} (${event.duration})
-                                        ${event.location ? `<br><i data-feather="map-pin"></i> ${event.location}` : ''}
-                                    </small>
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="card-title mb-2">${event.description}</h6>
+                                        <div class="text-muted">
+                                            <small>
+                                                <i data-feather="clock"></i> ${event.start_time} (${event.duration})
+                                                ${event.location ? `<br><i data-feather="map-pin"></i> ${event.location}` : ''}
+                                            </small>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
