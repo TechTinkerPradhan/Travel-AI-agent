@@ -92,6 +92,9 @@ def register_routes(app):
                 }), 400
 
             message = data.get("message", "").strip()
+            is_refinement = data.get("is_refinement", False)
+            previous_response = data.get("previous_response", "")
+
             if not message:
                 logger.error("Empty message in chat request")
                 return jsonify({
@@ -100,13 +103,19 @@ def register_routes(app):
                 }), 400
 
             user_id = str(current_user.id)
-            logger.debug(f"Processing chat request for user {user_id}: {message[:50]}...")
+            logger.debug(f"Processing {'refinement' if is_refinement else 'chat'} request for user {user_id}")
+            logger.debug(f"Message: {message[:50]}...")
 
             # Get user preferences (empty for development)
             prefs = {}
 
             # Generate travel plan
             try:
+                # If this is a refinement, include the previous response in the context
+                if is_refinement:
+                    logger.debug("Processing refinement request")
+                    message = f"Please refine the following travel plan based on this feedback: {message}\n\nPrevious plan:\n{previous_response}"
+
                 plan_result = generate_travel_plan(message, prefs)
                 if not isinstance(plan_result, dict):
                     logger.error(f"Invalid plan result format: {type(plan_result)}")
