@@ -1,3 +1,5 @@
+# services/airtable_service.py
+
 import os
 import logging
 import re
@@ -24,9 +26,9 @@ class AirtableService:
         # Clean up base ID - remove any trailing paths or slashes
         self.base_id = self.base_id.split('/')[0].strip()
 
-        # Define table names and schemas
+        # Define table names
         self.USER_PREFERENCES = "User Preferences"
-        self.ITINERARIES = "Travel Itineraries"  # Changed table name to be more descriptive
+        self.ITINERARIES = "Travel Itineraries"  # The table for storing itineraries
 
         # Try to initialize and test the connection
         self._test_connection()
@@ -34,54 +36,48 @@ class AirtableService:
     def _test_connection(self):
         """Test connection to Airtable and print table information"""
         try:
-            # Initialize tables
-            logging.info(f"Attempting to connect to tables")
+            logging.info(f"Attempting to connect to tables in base {self.base_id}")
             self.preferences_table = Table(self.access_token, self.base_id, self.USER_PREFERENCES)
             self.itineraries_table = Table(self.access_token, self.base_id, self.ITINERARIES)
 
-            # Try to list records from preferences table
-            logging.info("Attempting to list records and get schema...")
+            # Quick test on Preferences table
             try:
                 records = self.preferences_table.all(max_records=1)
                 if records:
                     field_names = list(records[0]['fields'].keys())
-                    logging.info(f"Available fields in preferences table: {field_names}")
-                    logging.info(f"Total records found: {len(records)}")
-                    logging.info(f"Sample record (fields only): {records[0]['fields']}")
+                    logging.info(f"Fields in {self.USER_PREFERENCES}: {field_names}")
                 else:
-                    logging.info("Preferences table exists but no records found")
+                    logging.info(f"No records found in {self.USER_PREFERENCES}")
             except Exception as e:
-                logging.warning(f"Could not read from preferences table: {str(e)}")
+                logging.warning(f"Could not read from {self.USER_PREFERENCES} table: {str(e)}")
 
-            # Try to list records from itineraries table
+            # Quick test on Itineraries table
             try:
-                itinerary_records = self.itineraries_table.all(max_records=1)
-                if itinerary_records:
-                    field_names = list(itinerary_records[0]['fields'].keys())
-                    logging.info(f"Available fields in itineraries table: {field_names}")
+                itn_records = self.itineraries_table.all(max_records=1)
+                if itn_records:
+                    field_names = list(itn_records[0]['fields'].keys())
+                    logging.info(f"Fields in {self.ITINERARIES}: {field_names}")
                 else:
-                    logging.info("Itineraries table exists but no records found")
+                    logging.info(f"No records found in {self.ITINERARIES}")
             except Exception as e:
-                logging.error(f"Could not read from itineraries table: {str(e)}")
+                logging.error(f"Could not read from {self.ITINERARIES} table: {str(e)}")
                 raise ValueError(
-                    "Please ensure the 'Travel Itineraries' table exists in your Airtable base "
-                    "with the following columns: 'User ID', 'Destination', 'Status', 'Start Date', "
-                    "'End Date', 'Related User Preferences', 'Related Travel Activities'"
+                    f"Please ensure '{self.ITINERARIES}' table exists with columns like: "
+                    "'User ID', 'Destination', 'Status', 'Start Date', 'End Date', etc."
                 )
 
         except Exception as e:
             logging.error(f"Airtable connection error: {str(e)}")
-            logging.error(f"Connection attempted with: base_id={self.base_id}")
             raise ValueError(f"Failed to connect to Airtable: {str(e)}")
 
     def save_user_preferences(self, user_id: str, preferences: Dict) -> Dict:
-        """Save user preferences to Airtable"""
+        """Save or update user preferences in the 'User Preferences' table."""
         try:
             formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
             logging.debug(f"Searching with formula: {formula}")
 
             existing_records = self.preferences_table.all(formula=formula)
-            logging.debug(f"Found {len(existing_records)} existing records")
+            logging.debug(f"Found {len(existing_records)} existing records for user {user_id}")
 
             fields = {
                 'User ID': user_id,
@@ -89,144 +85,131 @@ class AirtableService:
                 'Travel Style': preferences.get('travelStyle')
             }
 
-            logging.debug(f"Preparing to save fields: {fields}")
-
             if existing_records:
                 record_id = existing_records[0]['id']
-                logging.debug(f"Updating existing record: {record_id}")
+                logging.debug(f"Updating existing preferences record: {record_id}")
                 return self.preferences_table.update(record_id, fields)
             else:
-                logging.debug("Creating new record")
+                logging.debug("Creating new preferences record")
                 return self.preferences_table.create(fields)
 
         except Exception as e:
             logging.error(f"Error saving user preferences: {str(e)}")
-            error_context = f"Failed to save preferences for user {user_id} with fields {preferences}"
-            logging.error(error_context)
-            raise ValueError(f"Airtable Error: {str(e)}\nContext: {error_context}")
+            raise ValueError(f"Airtable Error: {str(e)}")
 
     def extract_dates_from_itinerary(self, content: str) -> tuple:
-        """Extract start and end dates from itinerary content"""
+        """Attempt to extract start and end dates from the itinerary text."""
         try:
-            # First try to find explicit dates in the content
             date_pattern = r'(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})'
             dates = re.findall(date_pattern, content)
 
             if dates:
                 # Convert found dates to datetime objects
-                parsed_dates = [datetime.strptime(d, '%Y-%m-%d' if '-' in d else '%m/%d/%Y') for d in dates]
-                start_date = min(parsed_dates).strftime('%Y-%m-%d')
-                end_date = max(parsed_dates).strftime('%Y-%m-%d')
+                parsed = []
+                for d in dates:
+                    if '-' in d:
+                        parsed.append(datetime.strptime(d, '%Y-%m-%d'))
+                    else:
+                        parsed.append(datetime.strptime(d, '%m/%d/%Y'))
+                start_date = min(parsed).strftime('%m/%d/%Y')
+                end_date = max(parsed).strftime('%m/%d/%Y')
             else:
-                # If no explicit dates found, count the number of days in the itinerary
+                # If no explicit date strings found, assume # of days from itinerary
                 day_pattern = r'Day\s+(\d+)'
-                days = re.findall(day_pattern, content)
-                num_days = max(map(int, days)) if days else 7  # Default to 7 days if no days found
-
-                # Use current date as start date
-                start_date = datetime.now().strftime('%Y-%m-%d')
-                end_date = (datetime.now() + timedelta(days=num_days)).strftime('%Y-%m-%d')
+                days = re.findall(day_pattern, content, re.IGNORECASE)
+                if days:
+                    num_days = max(map(int, days))
+                else:
+                    num_days = 7  # default
+                start_dt = datetime.now()
+                end_dt = start_dt + timedelta(days=num_days)
+                start_date = start_dt.strftime('%m/%d/%Y')
+                end_date = end_dt.strftime('%m/%d/%Y')
 
             return start_date, end_date
 
         except Exception as e:
             logging.error(f"Error extracting dates from itinerary: {str(e)}")
-            # Return default dates if extraction fails
-            return (
-                datetime.now().strftime('%Y-%m-%d'),
-                (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
-            )
+            # fallback: current date + 7 days
+            sd = datetime.now().strftime('%m/%d/%Y')
+            ed = (datetime.now() + timedelta(days=7)).strftime('%m/%d/%Y')
+            return (sd, ed)
 
     def extract_destination_from_query(self, query: str) -> str:
-        """Extract destination from the original query"""
+        """Extract a destination from the user's original query."""
         try:
-            # Look for patterns like "trip to [destination]" or "travel to [destination]"
-            destination_patterns = [
+            # Common patterns: "trip to X", "travel to X", "vacation in X", etc.
+            patterns = [
                 r'trip to ([A-Za-z\s]+)',
                 r'travel to ([A-Za-z\s]+)',
+                r'vacation in ([A-Za-z\s]+)',
                 r'visiting ([A-Za-z\s]+)',
                 r'holiday in ([A-Za-z\s]+)',
-                r'vacation in ([A-Za-z\s]+)',
-                r'in ([A-Za-z\s]+)'
+                r'going to ([A-Za-z\s]+)'
             ]
-
-            for pattern in destination_patterns:
-                match = re.search(pattern, query.lower())
+            for pat in patterns:
+                match = re.search(pat, query, re.IGNORECASE)
                 if match:
-                    destination = match.group(1).strip()
-                    # Capitalize the first letter of each word
-                    return ' '.join(word.capitalize() for word in destination.split())
-
-            # If no destination found in patterns, try to find location markers in the itinerary
-            locations = re.findall(r'\*\*([^*]+)\*\*', query)
-            if locations:
-                return locations[0].strip()
-
+                    raw_dest = match.group(1).strip()
+                    return raw_dest.title()  # capitalizes each word
             return "Unknown"
-
         except Exception as e:
             logging.error(f"Error extracting destination: {str(e)}")
             return "Unknown"
 
     def save_user_itinerary(self, user_id: str, original_query: str, selected_itinerary: str, user_changes: str = '') -> Dict:
-        """Save user itinerary to Airtable"""
+        """
+        Save the final user itinerary to the 'Travel Itineraries' table. 
+        Also link to the user's record in 'User Preferences'.
+        """
         try:
-            logging.debug(f"Creating itinerary record for user: {user_id}")
-
-            # Extract destination
+            # 1) Extract destination
             destination = self.extract_destination_from_query(original_query)
-            logging.debug(f"Extracted destination: {destination}")
+            logging.debug(f"Extracted destination from query: {destination}")
 
-            # Extract dates
+            # 2) Extract date range
             start_date, end_date = self.extract_dates_from_itinerary(selected_itinerary)
-            logging.debug(f"Extracted dates: {start_date} to {end_date}")
+            logging.debug(f"Extracted date range: {start_date} - {end_date}")
 
-            # Prepare fields for the itinerary record
+            # 3) Create the itinerary record
             itinerary_fields = {
                 'User ID': user_id,
                 'Destination': destination,
                 'Status': 'Active',
                 'Start Date': start_date,
                 'End Date': end_date
+                # Add other columns as needed (User Changes, Original Query, etc.)
             }
 
-            # Create itinerary record
-            record = self.itineraries_table.create(itinerary_fields)
-            logging.debug(f"Created itinerary record with ID: {record['id']}")
+            new_record = self.itineraries_table.create(itinerary_fields)
+            logging.debug(f"Created itinerary record with ID {new_record['id']}")
 
-            # Update User Preferences table with reference to itinerary
+            # 4) Optionally link the new itinerary to the user’s preferences record
             try:
-                existing_user = self.preferences_table.all(
-                    formula="{User ID} = '" + user_id.replace("'", "\\'") + "'"
-                )
-
+                formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
+                existing_user = self.preferences_table.all(formula=formula)
                 if existing_user:
-                    user_record = existing_user[0]
-                    existing_itineraries = user_record['fields'].get('Travel Itineraries', [])
-                    existing_itineraries.append(record['id'])
-
+                    user_rec_id = existing_user[0]['id']
+                    fields = existing_user[0]['fields']
+                    existing_itns = fields.get('Travel Itineraries', [])
+                    existing_itns.append(new_record['id'])
                     self.preferences_table.update(
-                        user_record['id'],
-                        {'Travel Itineraries': existing_itineraries}
+                        user_rec_id,
+                        {'Travel Itineraries': existing_itns}
                     )
-                    logging.debug(f"Updated user preferences with new itinerary reference")
+            except Exception as update_err:
+                logging.warning(f"Failed to update user preferences with itinerary reference: {update_err}")
 
-            except Exception as user_update_error:
-                logging.warning(f"Failed to update user preferences with itinerary reference: {str(user_update_error)}")
-                # Don't raise error here as the itinerary was still saved successfully
-
-            return record
+            return new_record
 
         except Exception as e:
             logging.error(f"Error saving user itinerary: {str(e)}")
             raise ValueError(f"Failed to save itinerary: {str(e)}")
 
     def get_user_preferences(self, user_id: str) -> Optional[Dict]:
-        """Retrieve user preferences from Airtable"""
+        """Retrieve user preferences from the 'User Preferences' table."""
         try:
             formula = "{User ID} = '" + user_id.replace("'", "\\'") + "'"
-            logging.debug(f"Fetching preferences with formula: {formula}")
-
             records = self.preferences_table.all(formula=formula)
             if records:
                 record = records[0]['fields']
