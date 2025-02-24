@@ -141,5 +141,51 @@ def register_routes(app):
                 "message": f"An unexpected error occurred: {str(e)}"
             }), 500
 
+    @app.route("/preferences", methods=["GET", "POST"])
+    @login_required
+    def preferences():
+        """Handle user preferences page"""
+        try:
+            if request.method == "POST":
+                data = request.json
+                if not data or "preferences" not in data:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Invalid preferences data"
+                    }), 400
+
+                user_prefs = data["preferences"]
+                user_id = str(current_user.id)
+
+                # Update preferences in Airtable
+                try:
+                    airtable_service.update_user_preferences(user_id, user_prefs)
+                    return jsonify({
+                        "status": "success",
+                        "message": "Preferences updated successfully"
+                    })
+                except Exception as e:
+                    logger.error(f"Error updating preferences: {e}", exc_info=True)
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Error updating preferences: {str(e)}"
+                    }), 500
+
+            # GET request - fetch current preferences
+            user_id = str(current_user.id)
+            try:
+                current_prefs = airtable_service.get_user_preferences(user_id) or {}
+                return render_template("preferences.html", preferences=current_prefs)
+            except Exception as e:
+                logger.error(f"Error fetching preferences: {e}", exc_info=True)
+                return render_template("preferences.html", preferences={})
+
+        except Exception as e:
+            logger.error(f"Unhandled error in preferences: {e}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": f"An unexpected error occurred: {str(e)}"
+            }), 500
+
     logger.debug("All routes registered successfully")
     return app
