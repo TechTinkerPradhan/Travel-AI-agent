@@ -1,8 +1,5 @@
-# services/calendar_service.py
-
 import os
 import logging
-import re
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -16,7 +13,7 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-        # Attempt to get domain (for Replit) or default
+        # Get domain for Replit
         replit_slug = os.environ.get('REPLIT_SLUG')
         repl_id = os.environ.get('REPL_ID')
         if replit_slug and repl_id:
@@ -25,8 +22,8 @@ class CalendarService:
             self.replit_domain = '0.0.0.0:5000'
 
         logger.debug("CalendarService initialized with:")
-        logger.debug(f" - Client ID: {bool(self.client_id)}")
-        logger.debug(f" - Client Secret: {bool(self.client_secret)}")
+        logger.debug(f" - Client ID available: {bool(self.client_id)}")
+        logger.debug(f" - Client Secret available: {bool(self.client_secret)}")
         logger.debug(f" - Domain: {self.replit_domain}")
 
         if not all([self.client_id, self.client_secret]):
@@ -55,13 +52,17 @@ class CalendarService:
             prompt='consent'
         )
 
+        # Ensure using HTTPS
         if authorization_url.startswith('http://'):
             authorization_url = 'https://' + authorization_url[7:]
+
+        logger.debug(f"Generated auth URL (truncated): {authorization_url[:50]}...")
         return authorization_url, state
 
     def verify_oauth2_callback(self, request_url, session_state):
-        """Handle the callback from Google with ?code=..."""
-        logger.debug(f"Verifying OAuth callback. request_url={request_url}, state={session_state}")
+        """Handle the callback from Google with authorization code."""
+        logger.debug("Verifying OAuth callback...")
+        logger.debug(f"State from session: {session_state}")
 
         client_config = {
             "web": {
@@ -72,15 +73,19 @@ class CalendarService:
                 "redirect_uris": [f"https://{self.replit_domain}/api/calendar/oauth2callback"]
             }
         }
+
         flow = Flow.from_client_config(client_config, scopes=self.SCOPES, state=session_state)
         flow.redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
 
-        # Force https if needed
+        # Force HTTPS for the callback URL
         if request_url.startswith('http://'):
             request_url = 'https://' + request_url[7:]
 
+        logger.debug("Fetching token...")
         flow.fetch_token(authorization_response=request_url)
         creds = flow.credentials
+
+        logger.debug("OAuth flow completed successfully")
         return {
             'token': creds.token,
             'refresh_token': creds.refresh_token,
