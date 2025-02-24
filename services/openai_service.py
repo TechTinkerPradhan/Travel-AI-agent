@@ -24,88 +24,69 @@ def generate_travel_plan(message, user_preferences):
         logger.debug(f"Message length: {len(message)}")
         logger.debug(f"User preferences: {user_preferences}")
 
-        system_prompt = """You are a travel planning assistant. You will provide TWO different travel plans.
-        Each plan should be well-formatted with:
-        - A clear title for each plan (e.g., 'Option 1: Cultural Focus' and 'Option 2: Adventure Focus')
-        - Each day's activities clearly marked with '## Day X: [Title]'
-        - Time-specific activities in 24-hour format (e.g., 09:00)
-        - Location information in **bold** text
-        - Duration estimates in parentheses
-        - Bullet points using '-' for individual activities
+        system_prompt = """You are a travel planning assistant that provides TWO different travel plan options.
+Each plan should include:
+- A descriptive title (e.g., 'Option 1: Cultural Focus')
+- Daily activities with '## Day X: [Title]'
+- Times in 24-hour format (09:00)
+- Locations in **bold**
+- Duration estimates in (parentheses)
+- Activities as bullet points with '-'
 
-        Format requirements:
-        1. Use '---' on its own line to separate the two plans
-        2. Ensure each day's activities are properly spaced and formatted
-        3. Include specific times and durations for all activities
-        4. Use consistent markdown formatting throughout
-        """
-
-        # Check if this is a refinement request
-        is_refinement = "refine" in message.lower() and "previous plan" in message.lower()
-
-        if is_refinement:
-            system_prompt += """
-            For refinement requests:
-            1. Carefully consider the feedback provided
-            2. Maintain the same format and structure
-            3. Provide two distinct alternatives
-            4. Keep successful elements from the previous plan
-            5. Clearly address the specific refinement requests
-            """
-
-        # Prepare message with user preferences
-        preferences_context = ""
-        if user_preferences:
-            preferences_context = "Consider these preferences:\n" + "\n".join([
-                f"- {key}: {value}" 
-                for key, value in user_preferences.items()
-                if value
-            ])
-
-        full_prompt = f"""
-{preferences_context}
-User request: {message}
-
-Please provide TWO distinct travel plans that cater to different aspects of the trip.
-Make each plan detailed and practical, with clear timings and locations.
+Use '---' to separate the two plans.
 """
 
-        logger.debug("Making OpenAI API call")
-        max_retries = 3
-        retry_count = 0
-        last_error = None
+        # Handle refinement requests
+        is_refinement = "refine" in message.lower() and "previous plan" in message.lower()
+        if is_refinement:
+            system_prompt += """
+For refinement requests:
+1. Keep successful elements from the previous plan
+2. Address the specific refinement requests
+3. Maintain the same format
+4. Provide two distinct alternatives
+"""
 
-        while retry_count < max_retries:
+        # Format user preferences if any
+        preferences_str = ""
+        if user_preferences:
+            preferences_str = "\nConsider these preferences:\n" + "\n".join(
+                f"- {key}: {value}" 
+                for key, value in user_preferences.items() 
+                if value
+            )
+
+        user_prompt = f"{preferences_str}\n\nUser request: {message}\n\nProvide TWO distinct travel plans with detailed timings and locations."
+
+        logger.debug("Making OpenAI API call")
+        for attempt in range(3):  # 3 retries
             try:
-                logger.debug(f"Attempt {retry_count + 1} of {max_retries}")
+                logger.debug(f"Attempt {attempt + 1} to call OpenAI API")
                 response = client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": full_prompt}
+                        {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=2000,
-                    temperature=0.7
+                    temperature=0.7,
+                    max_tokens=2000
                 )
 
                 content = response.choices[0].message.content
-                logger.debug(f"Received response (length: {len(content)})")
+                logger.debug(f"Received response length: {len(content)}")
 
                 # Split into two plans
                 plans = content.split('---')
                 if len(plans) != 2:
-                    logger.warning("OpenAI didn't return two plans, attempting to split content")
-                    # Try to find natural break points in the content
+                    logger.warning("OpenAI response doesn't contain two plans, attempting to split")
                     if "Option 2:" in content:
                         plans = content.split("Option 2:")
                         plans[1] = "Option 2:" + plans[1]
                     else:
-                        # Fallback: split content in half
                         mid = len(content) // 2
                         plans = [content[:mid], content[mid:]]
 
-                # Format the response
-                formatted_response = {
+                return {
                     "status": "success",
                     "alternatives": [
                         {
@@ -117,32 +98,25 @@ Make each plan detailed and practical, with clear timings and locations.
                     ]
                 }
 
-                logger.debug("Successfully formatted response")
-                return formatted_response
-
             except RateLimitError as e:
-                last_error = e
-                retry_count += 1
-                if retry_count == max_retries:
-                    logger.error("Rate limit reached, max retries exceeded")
-                    raise Exception("Rate limit exceeded, please try again later")
-                logger.warning(f"Rate limit hit, waiting {2 ** retry_count} seconds")
-                time.sleep(2 ** retry_count)  # Exponential backoff
+                logger.warning(f"Rate limit hit on attempt {attempt + 1}: {str(e)}")
+                if attempt == 2:  # Last attempt
+                    raise Exception("Rate limit exceeded. Please try again later.")
+                time.sleep(2 ** attempt)  # Exponential backoff
 
             except (APIError, APIConnectionError) as e:
-                logger.error(f"OpenAI API error: {str(e)}", exc_info=True)
-                raise Exception(f"Error communicating with OpenAI: {str(e)}")
+                logger.error(f"OpenAI API error on attempt {attempt + 1}: {str(e)}")
+                if attempt == 2:
+                    raise Exception(f"Error communicating with OpenAI: {str(e)}")
+                time.sleep(1)
 
             except Exception as e:
                 logger.error(f"Unexpected error in travel plan generation: {str(e)}", exc_info=True)
                 raise Exception(f"Failed to generate travel plan: {str(e)}")
 
-        if last_error:
-            raise last_error
-
     except Exception as e:
-        logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
-        raise Exception(f"Failed to generate travel plan: {str(e)}")
+        logger.error(f"Error in generate_travel_plan: {str(e)}", exc_info=True)
+        raise Exception(str(e))
 
 def analyze_user_preferences(query: str, selected_response: str):
     """

@@ -106,7 +106,7 @@ def register_routes(app):
             logger.debug(f"Processing {'refinement' if is_refinement else 'chat'} request for user {user_id}")
             logger.debug(f"Message: {message[:100]}...")
             if is_refinement:
-                logger.debug(f"Previous response length: {len(previous_response)}")
+                logger.debug(f"Previous response length: {len(str(previous_response))}")
 
             # Get user preferences from Airtable
             try:
@@ -123,24 +123,23 @@ def register_routes(app):
                     logger.debug("Processing refinement request")
                     # Extract content from previous response if it's in the alternatives format
                     if isinstance(previous_response, dict) and "alternatives" in previous_response:
-                        previous_content = previous_response["alternatives"][0]["content"]
+                        prev_content = previous_response["alternatives"][0]["content"]
                     else:
-                        previous_content = previous_response
+                        prev_content = str(previous_response)
 
-                    message = f"""Please refine the following travel plan based on this feedback:
+                    message = f"""Refine this travel plan based on the following feedback:
 
 Feedback: {message}
 
 Previous plan:
-{previous_content}
+{prev_content}
 
-Please keep the same format and provide TWO alternative plans as before, but adjust them according to the feedback.
-"""
+Please provide TWO alternative plans with similar format but incorporating the feedback."""
 
                 logger.debug(f"Calling OpenAI service with message length: {len(message)}")
                 plan_result = generate_travel_plan(message, prefs)
 
-                if not isinstance(plan_result, dict):
+                if not isinstance(plan_result, dict) or "alternatives" not in plan_result:
                     logger.error(f"Invalid plan result format: {type(plan_result)}")
                     return jsonify({
                         "status": "error",
@@ -161,7 +160,7 @@ Please keep the same format and provide TWO alternative plans as before, but adj
             logger.error(f"Unhandled error in chat endpoint: {e}", exc_info=True)
             return jsonify({
                 "status": "error",
-                "message": f"An unexpected error occurred: {str(e)}"
+                "message": str(e)
             }), 500
 
     @app.route("/preferences", methods=["GET", "POST"])
