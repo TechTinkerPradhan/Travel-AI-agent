@@ -116,7 +116,9 @@ def register_routes(app):
                     logger.debug("Processing refinement request")
                     message = f"Please refine the following travel plan based on this feedback: {message}\n\nPrevious plan:\n{previous_response}"
 
+                logger.debug(f"Calling OpenAI service with message: {message[:100]}...")
                 plan_result = generate_travel_plan(message, prefs)
+
                 if not isinstance(plan_result, dict):
                     logger.error(f"Invalid plan result format: {type(plan_result)}")
                     return jsonify({
@@ -131,7 +133,7 @@ def register_routes(app):
                 logger.error(f"Error generating travel plan: {e}", exc_info=True)
                 return jsonify({
                     "status": "error",
-                    "message": f"Error generating travel plan: {str(e)}"
+                    "message": str(e)
                 }), 500
 
         except Exception as e:

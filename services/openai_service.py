@@ -4,7 +4,6 @@ import random
 import logging
 import json
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError
-from services.ai_agents import AgentRegistry, AgentRole
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,7 +16,6 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-agent_registry = AgentRegistry()
 
 def generate_travel_plan(message, user_preferences):
     """
@@ -53,50 +51,63 @@ def generate_travel_plan(message, user_preferences):
         User message: {message}
 
         Provide TWO distinct travel plans that cater to different aspects of the trip.
-        Structure each day's activities with specific times and durations.
-        Make the plans different enough to give the user a real choice.
-        Consider:
-        1. User's specific request and preferences
-        2. Practical implementation details
-        3. Cost considerations where applicable
         """
 
         logger.debug("Making OpenAI API call")
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.7
-        )
+        max_retries = 3
+        retry_count = 0
 
-        content = response.choices[0].message.content
-        logger.debug(f"Received response (length: {len(content)})")
+        while retry_count < max_retries:
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": full_prompt}
+                    ],
+                    max_tokens=2000,
+                    temperature=0.7
+                )
 
-        # Split into two plans
-        plans = content.split('---')
-        if len(plans) != 2:
-            logger.warning("OpenAI didn't return two plans, attempting to split content")
-            # Fallback: split content in half
-            mid = len(content) // 2
-            plans = [content[:mid], content[mid:]]
+                content = response.choices[0].message.content
+                logger.debug(f"Received response (length: {len(content)})")
 
-        # Format the response
-        formatted_response = {
-            "status": "success",
-            "alternatives": [
-                {
-                    "id": f"option_{i+1}",
-                    "content": plan.strip(),
-                    "type": "itinerary"
+                # Split into two plans
+                plans = content.split('---')
+                if len(plans) != 2:
+                    logger.warning("OpenAI didn't return two plans, attempting to split content")
+                    # Fallback: split content in half
+                    mid = len(content) // 2
+                    plans = [content[:mid], content[mid:]]
+
+                # Format the response
+                formatted_response = {
+                    "status": "success",
+                    "alternatives": [
+                        {
+                            "id": f"option_{i+1}",
+                            "content": plan.strip(),
+                            "type": "itinerary"
+                        }
+                        for i, plan in enumerate(plans)
+                    ]
                 }
-                for i, plan in enumerate(plans)
-            ]
-        }
 
-        return formatted_response
+                return formatted_response
+
+            except RateLimitError:
+                retry_count += 1
+                if retry_count == max_retries:
+                    raise
+                time.sleep(2 ** retry_count)  # Exponential backoff
+
+            except (APIError, APIConnectionError) as e:
+                logger.error(f"OpenAI API error: {str(e)}", exc_info=True)
+                raise Exception(f"Error communicating with OpenAI: {str(e)}")
+
+            except Exception as e:
+                logger.error(f"Unexpected error in travel plan generation: {str(e)}", exc_info=True)
+                raise Exception(f"Failed to generate travel plan: {str(e)}")
 
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
