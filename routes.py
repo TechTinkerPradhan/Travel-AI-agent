@@ -52,17 +52,26 @@ def register_routes(app):
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
     def select_response():
-        """Analyze user preference from selected plan."""
+        """Save selected itinerary."""
         try:
             data = request.json
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
-            original_query = data.get("original_query", "")
-            selected_response = data.get("selected_response", "")
+            content = data.get("content")
+            original_query = data.get("original_query")
+            
+            if not content or not original_query:
+                return jsonify({"status": "error", "message": "Missing content or original query"}), 400
 
-            analysis = analyze_user_preferences(original_query, selected_response)
-            return jsonify({"status": "success", "preference_analysis": analysis})
+            # Save to Airtable
+            airtable_service.save_user_itinerary(
+                user_id=str(current_user.id),
+                original_query=original_query,
+                selected_itinerary=content
+            )
+
+            return jsonify({"status": "success"})
         except Exception as e:
             logger.error(f"Error in select_response: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
