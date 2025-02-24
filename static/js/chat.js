@@ -465,44 +465,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-
-    async function checkCalendarStatus() {
+    // (Optional) Check calendar auth on page load, if you want to update the UI
+    async function checkCalendarAuth() {
         try {
             const res = await fetch('/api/calendar/status');
             const data = await res.json();
-
-            const calendarBtn = document.getElementById('calendarAuthBtn');
-            const statusMsg = document.querySelector('.calendar-status-msg');
-
-            if (data.status === 'error') {
-                // Show error message
-                calendarBtn.classList.add('disabled');
-                calendarBtn.setAttribute('aria-disabled', 'true');
-                statusMsg.textContent = data.message;
-                statusMsg.style.display = 'block';
-            } else if (!data.available) {
-                calendarBtn.classList.add('disabled');
-                calendarBtn.setAttribute('aria-disabled', 'true');
-                statusMsg.style.display = 'block';
-            } else if (data.authenticated) {
-                calendarBtn.textContent = 'Calendar Connected';
-                calendarBtn.classList.remove('btn-outline-primary');
-                calendarBtn.classList.add('btn-success');
-                calendarBtn.classList.add('disabled');
-                statusMsg.style.display = 'none';
-            } else {
-                calendarBtn.classList.remove('disabled');
-                calendarBtn.removeAttribute('aria-disabled');
-                statusMsg.style.display = 'none';
-            }
+            // ... update your "calendarStatus" UI ...
         } catch (err) {
             console.error('Error checking calendar auth:', err);
-            const statusMsg = document.querySelector('.calendar-status-msg');
-            statusMsg.textContent = 'Error checking calendar status. Please try again later.';
-            statusMsg.style.display = 'block';
         }
     }
-
-    // Call this when the page loads
-    checkCalendarStatus();
+    checkCalendarAuth();
 });
