@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - AI Travel Assistant</title>
+    <title>Register - AI Travel Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
@@ -15,13 +15,26 @@
                 <div class="text-center mb-4">
                     <i data-feather="compass" class="text-primary mb-3" width="48" height="48"></i>
                     <h1 class="h3">AI Travel Assistant</h1>
-                    <p class="text-muted">Sign in to plan your next adventure</p>
+                    <p class="text-muted">Create an account to start planning your adventures</p>
                 </div>
 
                 <div class="card border-0 shadow-sm">
                     <div class="card-body p-4">
-                        <form method="POST" action="{{ url_for('auth.login') }}">
+                        <form method="POST" action="{{ url_for('auth.register') }}">
                             {{ form.csrf_token }}
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Full Name</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i data-feather="user" class="text-muted" width="18"></i>
+                                    </span>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                </div>
+                                {% if form.name.errors %}
+                                <div class="text-danger small mt-1">{{ form.name.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email address</label>
                                 <div class="input-group">
@@ -46,6 +59,7 @@
                                 {% if form.password.errors %}
                                 <div class="text-danger small mt-1">{{ form.password.errors[0] }}</div>
                                 {% endif %}
+                                <div class="form-text">Password must be at least 8 characters long</div>
                             </div>
 
                             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -59,29 +73,17 @@
                             {% endwith %}
 
                             <button type="submit" class="btn btn-primary w-100 mb-3">
-                                <i data-feather="log-in" class="me-2" width="16"></i>
-                                Sign in
+                                <i data-feather="user-plus" class="me-2" width="16"></i>
+                                Create Account
                             </button>
 
                             <div class="text-center">
-                                <p class="mb-0">Don't have an account? 
-                                    <a href="{{ url_for('auth.register') }}" class="text-primary">Register</a>
+                                <p class="mb-0">Already have an account? 
+                                    <a href="{{ url_for('auth.login') }}" class="text-primary">Sign in</a>
                                 </p>
                             </div>
                         </form>
                     </div>
-                </div>
-
-                <div class="mt-4 text-center text-muted">
-                    <small>Or continue with</small>
-                </div>
-
-                <div class="d-grid gap-2 mt-3">
-                    <a href="{{ url_for('auth.google_login') }}" class="btn btn-outline-light">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" 
-                             alt="Google" class="me-2" height="18">
-                        Continue with Google
-                    </a>
                 </div>
             </div>
         </div>
