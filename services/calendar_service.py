@@ -328,12 +328,22 @@ class CalendarService:
                 day_date = start_date + timedelta(days=day['day_number'] - 1)
 
                 for activity in day['activities']:
+                    duration_text = f"{activity['duration']} minutes"
+                    if activity['duration'] >= 60:
+                        hours = activity['duration'] // 60
+                        minutes = activity['duration'] % 60
+                        duration_text = f"{hours} hour{'s' if hours > 1 else ''}"
+                        if minutes:
+                            duration_text += f" {minutes} min{'s' if minutes > 1 else ''}"
+
                     # Format the event details
                     preview_events.append({
-                        'description': f"Day {day['day_number']}: {activity['description']}",
+                        'description': activity['description'].strip(),
                         'location': activity['location'],
                         'start_time': activity['time'],
-                        'duration': activity['duration']
+                        'duration': duration_text,
+                        'day_number': day['day_number'],
+                        'day_title': day['title']
                     })
 
             logger.debug(f"Generated {len(preview_events)} preview events")
