@@ -86,8 +86,8 @@ def validate_and_format_plan(content):
 
 def generate_travel_plan(message, user_preferences):
     """Generate travel recommendations using OpenAI's API with robust error handling"""
-    max_retries = 3
-    base_delay = 2  # Base delay in seconds
+    max_retries = 5  # Increased from 3 to 5
+    base_delay = 1  # Decreased from 2 to 1
     last_error = None
 
     system_prompt = """You are a travel planning assistant that provides TWO different travel plan options.
@@ -160,10 +160,12 @@ Option 2: Adventure Journey
 
         except RateLimitError as e:
             last_error = e
-            delay = (base_delay ** attempt) + (attempt * 0.1)
+            # Modified delay calculation for faster recovery
+            delay = (base_delay * (attempt + 1)) + (attempt * 0.1)  # Linear growth with small jitter
             logger.warning(f"Rate limit hit (attempt {attempt + 1}/{max_retries}). Waiting {delay:.1f} seconds...")
 
             if attempt == max_retries - 1:
+                logger.error("Maximum retries reached for rate limit")
                 raise Exception("Our AI service is currently busy. Please wait a moment and try again.")
 
             time.sleep(delay)
@@ -177,7 +179,7 @@ Option 2: Adventure Journey
             logger.error(f"OpenAI connection error: {str(e)}")
             if attempt == max_retries - 1:
                 raise Exception("We're having trouble connecting to our AI service. Please try again later.")
-            time.sleep(1)
+            time.sleep(0.5)  # Reduced from 1 second to 0.5 seconds
             continue
 
         except ValueError as e:
