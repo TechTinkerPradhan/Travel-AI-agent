@@ -54,6 +54,9 @@
                         <div id="calendarErrors" class="alert alert-danger" style="display: none;">
                             <small class="calendar-error-details"></small>
                         </div>
+                        <div id="calendarSuccess" class="alert alert-success" style="display: none;">
+                            <small>Successfully connected to Google Calendar!</small>
+                        </div>
                         <small class="text-muted calendar-status-msg" style="display: none;">
                             Calendar integration is currently unavailable. Please try again later.
                         </small>
@@ -137,6 +140,12 @@
                 const statusMsg = document.querySelector('.calendar-status-msg');
                 const errorDiv = document.getElementById('calendarErrors');
                 const errorDetails = document.querySelector('.calendar-error-details');
+                const successDiv = document.getElementById('calendarSuccess');
+
+                // Hide all feedback elements initially
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                statusMsg.style.display = 'none';
 
                 if (!data.available) {
                     console.error('Calendar service unavailable:', data);
@@ -149,10 +158,11 @@
                     }
                 } else if (data.authenticated) {
                     console.log('Calendar service authenticated');
-                    calendarBtn.textContent = 'Calendar Connected';
+                    calendarBtn.textContent = '✓ Calendar Connected';
                     calendarBtn.classList.remove('btn-outline-primary');
                     calendarBtn.classList.add('btn-success');
                     calendarBtn.classList.add('disabled');
+                    successDiv.style.display = 'block';
                 }
             } catch (error) {
                 console.error('Error checking calendar status:', error);
@@ -168,14 +178,30 @@
             console.log('Calendar auth button clicked');
             const errorDiv = document.getElementById('calendarErrors');
             const errorDetails = document.querySelector('.calendar-error-details');
+            const successDiv = document.getElementById('calendarSuccess');
+
+            // Clear any previous messages
             errorDiv.style.display = 'none';
             errorDetails.textContent = '';
+            successDiv.style.display = 'none';
         });
 
-        // Call this when the page loads
+        // Check status when the page loads and every 5 seconds after OAuth redirect
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Page loaded, checking calendar status...');
             checkCalendarStatus();
+
+            // If we were redirected back from OAuth, check status periodically
+            if (window.location.search.includes('code=')) {
+                const statusCheck = setInterval(() => {
+                    checkCalendarStatus();
+                }, 5000);
+
+                // Stop checking after 30 seconds
+                setTimeout(() => {
+                    clearInterval(statusCheck);
+                }, 30000);
+            }
         });
     </script>
 </body>
