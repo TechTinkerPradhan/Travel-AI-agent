@@ -47,11 +47,10 @@ def register_calendar_routes(app):
             return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/auth/google_callback")
-    def oauth2_callback():
-        """Handle Google's callback for both auth and calendar"""
+    def google_callback():
+        """Handle Google's callback for calendar"""
         logger.debug("OAuth callback endpoint called")
 
-        # Check if this is a calendar callback
         calendar_state = session.get("calendar_oauth_state")
         if calendar_state:
             try:
@@ -68,9 +67,9 @@ def register_calendar_routes(app):
             except Exception as e:
                 logger.error(f"Error in calendar callback: {e}", exc_info=True)
                 return jsonify({"status": "error", "message": str(e)}), 500
+        else:
+            return jsonify({"status": "error", "message": "Invalid callback state"}), 400
 
-        # Otherwise, treat as auth callback
-        return auth.google_callback()
 
     logger.debug("Calendar routes registered successfully")
 
