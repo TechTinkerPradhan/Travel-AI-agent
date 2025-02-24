@@ -4,6 +4,7 @@ import os
 import logging
 from datetime import datetime
 from flask import request, jsonify, render_template, redirect, session, url_for
+from flask_login import login_required, current_user
 from services.airtable_service import AirtableService
 from services.calendar_service import CalendarService
 from services.openai_service import generate_travel_plan, analyze_user_preferences
@@ -20,10 +21,13 @@ def register_routes(app):
 
     @app.route("/")
     def index():
-        """Main page with chat UI"""
+        """Redirect to login if not authenticated, otherwise show main page"""
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
         return render_template("index.html")
 
     @app.route("/api/chat", methods=["POST"])
+    @login_required
     def chat():
         """Handle user chat message to generate itinerary plan or refine it."""
         try:
@@ -32,7 +36,7 @@ def register_routes(app):
                 return jsonify({"status":"error","message":"No data provided"}),400
 
             message = data.get("message","").strip()
-            user_id = data.get("user_id","default")
+            user_id = str(current_user.id)  # Use the logged-in user's ID
 
             # Retrieve user preferences from Airtable if they exist
             prefs = {}
@@ -51,6 +55,7 @@ def register_routes(app):
             return jsonify({"status":"error","message":f"Unexpected error: {e}"}),500
 
     @app.route("/api/chat/select", methods=["POST"])
+    @login_required
     def select_response():
         """Optional: analyze user preference from selected plan, if needed."""
         try:
@@ -68,14 +73,13 @@ def register_routes(app):
             return jsonify({"status":"error","message":f"{e}"}),500
 
     @app.route("/api/preferences", methods=["POST"])
+    @login_required
     def update_preferences():
         """Save user preferences in Airtable."""
         try:
             data = request.json
-            user_id = data.get("user_id")
+            user_id = str(current_user.id)  # Use the logged-in user's ID
             prefs = data.get("preferences",{})
-            if not user_id:
-                return jsonify({"status":"error","message":"User ID is required"}),400
 
             airtable_service.save_user_preferences(user_id, prefs)
             return jsonify({"status":"success"})
@@ -84,6 +88,7 @@ def register_routes(app):
             return jsonify({"status":"error","message":str(e)}),500
 
     @app.route("/api/itinerary/save", methods=["POST"])
+    @login_required
     def save_itinerary():
         """Save a chosen itinerary to Airtable's 'Travel Itineraries' table."""
         try:
@@ -91,13 +96,13 @@ def register_routes(app):
             if not data:
                 return jsonify({"status":"error","message":"No data provided"}),400
 
-            user_id = data.get("user_id")
+            user_id = str(current_user.id)  # Use the logged-in user's ID
             original_query = data.get("original_query","")
             selected_itinerary = data.get("selected_itinerary","")
             user_changes = data.get("user_changes","")
 
-            if not user_id or not selected_itinerary:
-                return jsonify({"status":"error","message":"Missing user_id or itinerary"}),400
+            if not selected_itinerary:
+                return jsonify({"status":"error","message":"Missing itinerary"}),400
 
             record = airtable_service.save_user_itinerary(
                 user_id=user_id,
@@ -112,6 +117,7 @@ def register_routes(app):
             return jsonify({"status":"error","message":str(e)}),500
 
     @app.route("/api/calendar/auth")
+    @login_required
     def calendar_auth():
         """Initiate Google OAuth flow."""
         try:
@@ -123,6 +129,7 @@ def register_routes(app):
             return jsonify({"status":"error","message":str(e)}),500
 
     @app.route("/api/calendar/oauth2callback")
+    @login_required
     def oauth2callback():
         """Handle Google's callback after user consents to Calendar access."""
         try:
@@ -139,64 +146,6 @@ def register_routes(app):
             return redirect(url_for("index"))
         except Exception as e:
             logger.error(f"Error in oauth2callback: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
-
-    @app.route("/api/calendar/status")
-    def calendar_status():
-        """Check if we have Google credentials in session."""
-        try:
-            is_authed = "google_credentials" in session
-            return jsonify({"status":"success","authenticated":is_authed})
-        except Exception as e:
-            logger.error(f"Error in calendar_status: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
-
-    @app.route("/api/calendar/event", methods=["POST"])
-    def create_calendar_event():
-        """Create the actual calendar events from the final itinerary."""
-        try:
-            if "google_credentials" not in session:
-                return jsonify({"status":"error","message":"Not authenticated with Google Calendar"}),401
-
-            data = request.json
-            itinerary_content = data.get("itinerary_content","")
-            start_date = data.get("start_date")
-
-            created_ids = calendar_service.create_calendar_events(session["google_credentials"], itinerary_content, start_date)
-            return jsonify({"status":"success","event_ids":created_ids})
-
-        except Exception as e:
-            logger.error(f"Error creating calendar events: {e}", exc_info=True)
-            return jsonify({"status":"error","message":f"Failed to create calendar events: {e}"}),500
-
-    @app.route("/api/calendar/preview", methods=["POST"])
-    def preview_calendar_events():
-        """Generate preview data for itinerary without creating them in Google Calendar."""
-        try:
-            data = request.json
-            itinerary_content = data.get("itinerary_content","")
-            start_date = data.get("start_date")
-
-            preview_data = calendar_service.create_calendar_preview(itinerary_content, start_date)
-
-            if hasattr(preview_data, '__await__'):
-                import asyncio
-                preview_data = asyncio.run(preview_data)
-
-            return jsonify({"status":"success","preview":preview_data})
-        except Exception as e:
-            logger.error(f"Error previewing calendar events: {e}", exc_info=True)
-            return jsonify({"status":"error","message":f"Failed to generate events preview: {e}"}),500
-
-    @app.route("/api/calendar/logout")
-    def calendar_logout():
-        """Clear Google credentials from session."""
-        try:
-            if "google_credentials" in session:
-                del session["google_credentials"]
-            return redirect(url_for("index"))
-        except Exception as e:
-            logger.error(f"Error in calendar_logout: {e}", exc_info=True)
             return jsonify({"status":"error","message":str(e)}),500
 
     return app

@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, url_for, session, request
+from flask import Blueprint, redirect, url_for, session, request, render_template
 from flask_login import login_user, logout_user, login_required, current_user
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
@@ -37,20 +37,20 @@ def google_login():
         },
         scopes=['openid', 'email', 'profile']
     )
-    
+
     authorization_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
         prompt='consent'
     )
-    
+
     session['state'] = state
     return redirect(authorization_url)
 
 @auth.route('/google_login/callback')
 def google_callback():
     state = session.get('state')
-    
+
     flow = Flow.from_client_config(
         {
             "web": {
@@ -64,20 +64,20 @@ def google_callback():
         scopes=['openid', 'email', 'profile'],
         state=state
     )
-    
+
     flow.fetch_token(
         authorization_response=request.url.replace("http://", "https://")
     )
-    
+
     credentials = flow.credentials
     id_info = id_token.verify_oauth2_token(
         credentials.id_token, requests.Request(), GOOGLE_CLIENT_ID
     )
-    
+
     email = id_info.get('email')
     name = id_info.get('name')
     google_id = id_info.get('sub')
-    
+
     user = User.query.filter_by(email=email).first()
     if not user:
         user = User(
@@ -87,7 +87,7 @@ def google_callback():
         )
         db.session.add(user)
         db.session.commit()
-    
+
     login_user(user)
     return redirect(url_for('main.index'))
 

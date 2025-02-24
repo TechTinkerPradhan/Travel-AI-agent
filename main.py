@@ -1,6 +1,7 @@
 import os
 import logging
 from flask import Flask, jsonify
+from flask_login import LoginManager
 from routes import register_routes
 
 # Set up logging
@@ -15,6 +16,11 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
 
+# Initialize LoginManager
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'  # Specify the login view
+
 # Register error handlers
 @app.errorhandler(Exception)
 def handle_exception(e):
@@ -26,6 +32,17 @@ def handle_exception(e):
 def not_found(e):
     """Return JSON instead of HTML for HTTP 404"""
     return jsonify({"status": "error", "message": "Resource not found"}), 404
+
+# Import user loader after app creation
+from models.user import User
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Register blueprints
+from blueprints.auth import auth as auth_blueprint
+app.register_blueprint(auth_blueprint, url_prefix='/auth')
 
 # Register routes
 register_routes(app)
