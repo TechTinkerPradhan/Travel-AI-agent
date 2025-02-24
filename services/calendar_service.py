@@ -21,7 +21,10 @@ class CalendarService:
         logger.debug(f" - Calendar Secret length: {len(self.client_secret)}")
         logger.debug(f" - Domain: {self.replit_domain}")
 
-        if self.client_id and self.client_secret and len(self.client_id) > 20 and len(self.client_secret) > 20:
+        logger.info(f"Client ID valid: {bool(self.client_id)}")
+        logger.info(f"Client Secret valid: {bool(self.client_secret)}")
+        
+        if self.client_id and self.client_secret:
             self.is_available = True
             logger.info("Calendar service initialized successfully")
         else:
