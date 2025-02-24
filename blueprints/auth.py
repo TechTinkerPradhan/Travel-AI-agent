@@ -40,6 +40,7 @@ def google_login():
                 "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
             }
         },
+        # Keep only authentication scopes, remove calendar scopes
         scopes=['openid', 'email', 'profile']
     )
 
