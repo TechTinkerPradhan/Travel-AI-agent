@@ -36,8 +36,8 @@ def google_login():
     # Strictly use only authentication scopes
     auth_scopes = [
         'openid',
-        'email',
-        'profile'
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile'
     ]
 
     flow = Flow.from_client_config(
