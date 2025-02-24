@@ -1,8 +1,6 @@
 import os
 import time
-import random
 import logging
-import json
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 
 # Configure logging
@@ -19,7 +17,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 def generate_travel_plan(message, user_preferences):
     """
-    Generate multiple travel recommendations using OpenAI's API
+    Generate travel recommendations using OpenAI's API
     """
     try:
         logger.debug("Starting travel plan generation")
