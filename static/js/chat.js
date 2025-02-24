@@ -7,32 +7,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    // -------------
-    // MAIN HELPERS
-    // -------------
-    function addMessage(content, isUser = false, isError = false) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
-
-        if (typeof content === 'string') {
-            // For regular messages, just set the text
-            messageDiv.textContent = content;
-        } else if (content.alternatives) {
-            // The AI returned multiple itinerary alternatives
-            messageDiv.innerHTML = `<div class="response-options">
-                <h6 class="mb-3">Here are some tailored recommendations:</h6>
-            </div>`;
-            content.alternatives.forEach((option) => {
-                const optionElement = createResponseOption(option);
-                messageDiv.querySelector('.response-options').appendChild(optionElement);
-            });
-        } else {
-            console.error('Unexpected content format:', content);
-            messageDiv.textContent = 'Error: Unexpected response format';
-        }
-
-        chatMessages.appendChild(messageDiv);
+    function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message system loading-message';
+        loadingDiv.innerHTML = '<div class="loading"></div>';
+        chatMessages.appendChild(loadingDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+        return loadingDiv;
     }
 
     function formatPlanContent(content) {
@@ -57,6 +38,31 @@ document.addEventListener('DOMContentLoaded', function() {
             '<div class="activity-item"><i data-feather="chevron-right"></i> $1</div>');
 
         return formatted;
+    }
+
+    function addMessage(content, isUser = false, isError = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
+
+        if (typeof content === 'string') {
+            // For regular messages, just set the text
+            messageDiv.textContent = content;
+        } else if (content.alternatives) {
+            // The AI returned multiple itinerary alternatives
+            messageDiv.innerHTML = `<div class="response-options">
+                <h6 class="mb-3">Here are some tailored recommendations:</h6>
+            </div>`;
+            content.alternatives.forEach((option) => {
+                const optionElement = createResponseOption(option);
+                messageDiv.querySelector('.response-options').appendChild(optionElement);
+            });
+        } else {
+            console.error('Unexpected content format:', content);
+            messageDiv.textContent = 'Error: Unexpected response format';
+        }
+
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     function createResponseOption(optionData) {
@@ -443,30 +449,6 @@ document.addEventListener('DOMContentLoaded', function() {
             loadingMessage.remove();
             console.error('Chat error:', err);
             addMessage('Error: ' + err.message, false, true);
-        }
-    });
-
-    preferencesForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const preferences = {
-            budget: document.getElementById('budget').value,
-            travelStyle: document.getElementById('travelStyle').value
-        };
-
-        try {
-            const response = await fetch('/api/preferences', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId, preferences })
-            });
-            const data = await response.json();
-            if (data.status === 'success') {
-                addMessage('Preferences updated successfully! How can I help you plan your trip?');
-            } else {
-                addMessage('Error saving preferences: ' + data.message, false, true);
-            }
-        } catch (err) {
-            addMessage('Error connecting to server: ' + err.message, false, true);
         }
     });
 
