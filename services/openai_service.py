@@ -24,18 +24,9 @@ def generate_travel_plan(message, user_preferences):
         logger.debug(f"Message length: {len(message)}")
         logger.debug(f"User preferences: {user_preferences}")
 
-        # Prepare context with user preferences
-        preferences_context = "\n".join([
-            f"{key}: {value}" 
-            for key, value in user_preferences.items()
-            if value
-        ])
-        logger.debug(f"User preferences context: {preferences_context}")
-
         system_prompt = """You are a travel planning assistant. You will provide TWO different travel plans.
         Each plan should be well-formatted with:
         - A clear title for each plan (e.g., 'Option 1: Cultural Focus' and 'Option 2: Adventure Focus')
-        - Clear headings using markdown (##)
         - Each day's activities clearly marked with '## Day X: [Title]'
         - Time-specific activities in 24-hour format (e.g., 09:00)
         - Location information in **bold** text
@@ -62,12 +53,22 @@ def generate_travel_plan(message, user_preferences):
             5. Clearly address the specific refinement requests
             """
 
-        full_prompt = f"""User preferences: {preferences_context}
-        User message: {message}
+        # Prepare message with user preferences
+        preferences_context = ""
+        if user_preferences:
+            preferences_context = "Consider these preferences:\n" + "\n".join([
+                f"- {key}: {value}" 
+                for key, value in user_preferences.items()
+                if value
+            ])
 
-        Provide TWO distinct travel plans that cater to different aspects of the trip.
-        Make each plan detailed and practical, with clear timings and locations.
-        """
+        full_prompt = f"""
+{preferences_context}
+User request: {message}
+
+Please provide TWO distinct travel plans that cater to different aspects of the trip.
+Make each plan detailed and practical, with clear timings and locations.
+"""
 
         logger.debug("Making OpenAI API call")
         max_retries = 3
@@ -136,10 +137,11 @@ def generate_travel_plan(message, user_preferences):
                 logger.error(f"Unexpected error in travel plan generation: {str(e)}", exc_info=True)
                 raise Exception(f"Failed to generate travel plan: {str(e)}")
 
+        if last_error:
+            raise last_error
+
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
-        if last_error:
-            logger.error(f"Last error before failure: {str(last_error)}")
         raise Exception(f"Failed to generate travel plan: {str(e)}")
 
 def analyze_user_preferences(query: str, selected_response: str):
