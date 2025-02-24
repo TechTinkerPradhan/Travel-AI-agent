@@ -39,20 +39,25 @@ def generate_travel_plan(message, user_preferences):
         ])
         logger.debug(f"User preferences context: {preferences_context}")
 
-        system_prompt = """You are a travel planning assistant. Provide responses in a well-formatted structure with:
+        system_prompt = """You are a travel planning assistant. You will provide TWO different travel plans.
+        Each plan should be well-formatted with:
+        - A clear title for each plan (e.g., 'Option 1: Cultural Focus' and 'Option 2: Adventure Focus')
         - Clear headings using markdown (##)
         - Each day's activities clearly marked with '## Day X: [Title]'
         - Time-specific activities in 24-hour format (e.g., 09:00)
-        - Location information in bold text
+        - Location information in **bold** text
         - Duration estimates in parentheses
-        - Bullet points for individual activities
+        - Bullet points using '-' for individual activities
+
+        Separate the two plans with '---' on its own line.
         """
 
         full_prompt = f"""User preferences: {preferences_context}
         User message: {message}
 
-        Provide a detailed travel recommendation.
+        Provide TWO distinct travel plans that cater to different aspects of the trip.
         Structure each day's activities with specific times and durations.
+        Make the plans different enough to give the user a real choice.
         Consider:
         1. User's specific request and preferences
         2. Practical implementation details
@@ -73,13 +78,26 @@ def generate_travel_plan(message, user_preferences):
         content = response.choices[0].message.content
         logger.debug(f"Received response (length: {len(content)})")
 
+        # Split into two plans
+        plans = content.split('---')
+        if len(plans) != 2:
+            logger.warning("OpenAI didn't return two plans, attempting to split content")
+            # Fallback: split content in half
+            mid = len(content) // 2
+            plans = [content[:mid], content[mid:]]
+
         # Format the response as JSON
         formatted_response = {
             "status": "success",
             "alternatives": [
                 {
                     "id": "option_1",
-                    "content": content,
+                    "content": plans[0].strip(),
+                    "type": "itinerary"
+                },
+                {
+                    "id": "option_2",
+                    "content": plans[1].strip(),
                     "type": "itinerary"
                 }
             ]
