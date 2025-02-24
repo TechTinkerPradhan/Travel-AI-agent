@@ -33,7 +33,7 @@ def google_login():
     # Auth-specific callback URL
     redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
 
-    # Strictly use only authentication scopes
+    # Use full scope URLs as required by Google OAuth
     auth_scopes = [
         'openid',
         'https://www.googleapis.com/auth/userinfo.email',
@@ -102,7 +102,7 @@ def google_callback():
                         "redirect_uris": [redirect_uri]
                     }
                 },
-                scopes=['openid', 'email', 'profile'],
+                scopes=['openid', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
                 state=auth_state
             )
 
