@@ -1,3 +1,4 @@
+
 import os
 import logging
 from flask import Flask
@@ -17,11 +18,11 @@ login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = os.environ.get("SESSION_SECRET")
+    app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
     # Configure SQLAlchemy with SQLite fallback
     logger.debug("Configuring database connection...")
-    database_url = os.environ.get("SQLALCHEMY_DATABASE_URI") or os.environ.get("DATABASE_URL") or "sqlite:///local.db"
+    database_url = os.environ.get("DATABASE_URL") or "sqlite:///local.db"
     logger.info(f"Using database: {database_url}")
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
