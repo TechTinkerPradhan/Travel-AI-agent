@@ -17,6 +17,7 @@ auth = Blueprint('auth', __name__)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+REPLIT_DOMAIN = "ai-travel-buddy-bboyswagat.replit.app"
 
 # Initialize Airtable service
 airtable_service = AirtableService()
@@ -36,11 +37,14 @@ def google_login():
                 "client_secret": GOOGLE_CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [url_for('auth.google_callback', _external=True, _scheme='https')]
+                "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
             }
         },
         scopes=['openid', 'email', 'profile']
     )
+
+    # Set the redirect URI using the configured domain
+    flow.redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
 
     authorization_url, state = flow.authorization_url(
         access_type='offline',
@@ -66,7 +70,7 @@ def google_callback():
                     "client_secret": GOOGLE_CLIENT_SECRET,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [url_for('auth.google_callback', _external=True, _scheme='https')]
+                    "redirect_uris": [f"https://{REPLIT_DOMAIN}/auth/google_callback"]
                 }
             },
             scopes=['openid', 'email', 'profile'],
@@ -74,7 +78,7 @@ def google_callback():
         )
 
         # Use the same redirect_uri as configured in flow
-        flow.redirect_uri = url_for('auth.google_callback', _external=True, _scheme='https')
+        flow.redirect_uri = f"https://{REPLIT_DOMAIN}/auth/google_callback"
 
         # Handle authorization response
         flow.fetch_token(authorization_response=request.url)

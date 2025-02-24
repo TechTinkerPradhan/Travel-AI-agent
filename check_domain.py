@@ -24,7 +24,7 @@ if replit_domain:
     print("1. Authorized JavaScript origins:")
     print(f"https://{replit_domain}")
     print("\n2. Authorized redirect URIs:")
-    print(f"https://{replit_domain}/api/calendar/oauth2callback")
+    print(f"https://{replit_domain}/auth/google_callback")
 
 # Alternative domain check using REPLIT_DEV_DOMAIN
 dev_domain = os.environ.get('REPLIT_DEV_DOMAIN')
@@ -36,7 +36,7 @@ if dev_domain:
     print("1. Authorized JavaScript origins:")
     print(f"https://{dev_domain}")
     print("\n2. Authorized redirect URIs:")
-    print(f"https://{dev_domain}/api/calendar/oauth2callback")
+    print(f"https://{dev_domain}/auth/google_callback")
 
 if not (replit_domain or dev_domain):
     print("\nWarning: Could not determine Replit domain.")
