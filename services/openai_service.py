@@ -1,6 +1,10 @@
 import os
 import time
 import logging
+import threading
+from datetime import datetime, timedelta
+from queue import Queue
+from typing import Dict, Optional
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 
 # Configure logging
@@ -15,12 +19,36 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def validate_and_format_plan(content):
+# Request queue and rate limiting
+request_queue = Queue()
+last_request_time = datetime.now()
+request_lock = threading.Lock()
+MIN_REQUEST_INTERVAL = 0.1  # seconds between requests
+
+# Response cache
+response_cache: Dict[str, Dict] = {}
+CACHE_DURATION = timedelta(minutes=5)
+
+def get_cached_response(message: str) -> Optional[Dict]:
+    """Get cached response if available and not expired"""
+    if message in response_cache:
+        timestamp, response = response_cache[message]
+        if datetime.now() - timestamp < CACHE_DURATION:
+            logger.debug("Using cached response")
+            return response
+        else:
+            del response_cache[message]
+    return None
+
+def cache_response(message: str, response: Dict):
+    """Cache a response with timestamp"""
+    response_cache[message] = (datetime.now(), response)
+
+def validate_and_format_plan(content: str) -> list:
     """Validate and format the travel plan content"""
     try:
-        # Basic validation
         if not content or len(content.strip()) < 100:
-            raise ValueError("Generated content is too short or empty")
+            raise ValueError("Generated content is too short")
 
         # Split into plans
         plans = []
@@ -30,13 +58,12 @@ def validate_and_format_plan(content):
             plans = content.split('Option 2:')
             plans[1] = 'Option 2:' + plans[1]
         else:
-            # Try to identify natural breaks in the content
             lines = content.split('\n')
             current_plan = []
             current_plan_content = []
 
             for line in lines:
-                if line.strip().startswith('Option 1:') or line.strip().startswith('## Day'):
+                if line.strip().startswith(('Option 1:', '## Day')):
                     if current_plan and not current_plan_content:
                         current_plan_content = current_plan
                         current_plan = []
@@ -46,29 +73,25 @@ def validate_and_format_plan(content):
                 if current_plan_content:
                     plans = ['\n'.join(current_plan_content), '\n'.join(current_plan)]
                 else:
-                    # If no clear break found, split roughly in half
                     mid = len(lines) // 2
                     plans = ['\n'.join(lines[:mid]), '\n'.join(lines[mid:])]
 
-        # Validate each plan
+        # Format and validate each plan
         formatted_plans = []
         for i, plan in enumerate(plans):
             plan = plan.strip()
             if not plan:
                 continue
 
-            # Ensure plan has a title
             if not any(plan.startswith(prefix) for prefix in ['Option', '#']):
                 plan = f"Option {i+1}:\n{plan}"
 
-            # Ensure each plan has day markers
             if '## Day' not in plan:
-                logger.warning(f"Plan {i+1} missing day markers, attempting to format")
                 lines = plan.split('\n')
                 formatted_lines = []
                 current_day = 1
                 for line in lines:
-                    if line.lower().startswith(('morning', 'afternoon', 'evening')) and not any(l.startswith('## Day') for l in formatted_lines[-5:] if formatted_lines):
+                    if line.lower().startswith(('morning', 'afternoon', 'evening')):
                         formatted_lines.append(f"\n## Day {current_day}")
                         current_day += 1
                     formatted_lines.append(line)
@@ -77,17 +100,63 @@ def validate_and_format_plan(content):
             formatted_plans.append(plan)
 
         if len(formatted_plans) < 2:
-            raise ValueError("Failed to generate two distinct travel plans")
+            raise ValueError("Failed to generate two distinct plans")
 
         return formatted_plans
+
     except Exception as e:
         logger.error(f"Error in validate_and_format_plan: {str(e)}")
         raise
 
-def generate_travel_plan(message, user_preferences):
-    """Generate travel recommendations using OpenAI's API with robust error handling"""
-    max_retries = 5  # Increased from 3 to 5
-    base_delay = 1  # Decreased from 2 to 1
+def process_request():
+    """Process requests from the queue with rate limiting"""
+    global last_request_time
+
+    while True:
+        try:
+            args = request_queue.get()
+            if args is None:
+                break
+
+            message, user_preferences = args
+
+            # Check cache first
+            cached_response = get_cached_response(message)
+            if cached_response:
+                request_queue.task_done()
+                return cached_response
+
+            # Implement request spacing
+            with request_lock:
+                now = datetime.now()
+                time_since_last = (now - last_request_time).total_seconds()
+                if time_since_last < MIN_REQUEST_INTERVAL:
+                    time.sleep(MIN_REQUEST_INTERVAL - time_since_last)
+                last_request_time = datetime.now()
+
+            # Generate the travel plan
+            response = generate_travel_plan_internal(message, user_preferences)
+
+            # Cache the successful response
+            if response and response.get("status") == "success":
+                cache_response(message, response)
+
+            request_queue.task_done()
+            return response
+
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}")
+            request_queue.task_done()
+            raise
+
+# Start the request processing thread
+request_thread = threading.Thread(target=process_request, daemon=True)
+request_thread.start()
+
+def generate_travel_plan_internal(message: str, user_preferences: Dict) -> Dict:
+    """Internal function to generate travel plan with retries"""
+    max_retries = 5
+    base_delay = 0.5
     last_error = None
 
     system_prompt = """You are a travel planning assistant that provides TWO different travel plan options.
@@ -99,25 +168,12 @@ Each plan MUST include:
 5. Duration estimates in (parentheses)
 6. Activities as bullet points with '-'
 
-Separate the two plans with '---' on a new line.
-
-Example format:
-Option 1: Cultural Exploration
-## Day 1: City Discovery
-09:00 - Visit **Central Museum** (2 hours)
-- Guided tour of historical artifacts
-- Special exhibition on local culture
-
-[Continue with more days...]
----
-Option 2: Adventure Journey
-[Second plan in same format...]"""
+Separate the two plans with '---' on a new line."""
 
     for attempt in range(max_retries):
         try:
             logger.debug(f"Attempt {attempt + 1}/{max_retries} to generate travel plan")
 
-            # Format user preferences
             preferences_str = ""
             if user_preferences:
                 preferences_str = "\nConsider these preferences:\n" + "\n".join(
@@ -128,7 +184,6 @@ Option 2: Adventure Journey
 
             user_prompt = f"{preferences_str}\n\nUser request: {message}\n\nProvide TWO distinct travel plans with detailed timings and locations."
 
-            # Make API call
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -139,11 +194,9 @@ Option 2: Adventure Journey
                 max_tokens=2000
             )
 
-            # Get and validate content
             content = response.choices[0].message.content
             logger.debug(f"Received response of length: {len(content)}")
 
-            # Validate and format the plans
             formatted_plans = validate_and_format_plan(content)
 
             return {
@@ -160,42 +213,40 @@ Option 2: Adventure Journey
 
         except RateLimitError as e:
             last_error = e
-            # Modified delay calculation for faster recovery
-            delay = (base_delay * (attempt + 1)) + (attempt * 0.1)  # Linear growth with small jitter
+            delay = base_delay * (attempt + 1)
             logger.warning(f"Rate limit hit (attempt {attempt + 1}/{max_retries}). Waiting {delay:.1f} seconds...")
 
             if attempt == max_retries - 1:
-                logger.error("Maximum retries reached for rate limit")
-                raise Exception("Our AI service is currently busy. Please wait a moment and try again.")
+                raise Exception("Service is experiencing high demand. Please try again in a few moments.")
 
             time.sleep(delay)
             continue
 
-        except APIError as e:
+        except (APIError, APIConnectionError) as e:
             logger.error(f"OpenAI API error: {str(e)}")
-            raise Exception("There was an issue connecting to our AI service. Please try again.")
-
-        except APIConnectionError as e:
-            logger.error(f"OpenAI connection error: {str(e)}")
-            if attempt == max_retries - 1:
-                raise Exception("We're having trouble connecting to our AI service. Please try again later.")
-            time.sleep(0.5)  # Reduced from 1 second to 0.5 seconds
-            continue
-
-        except ValueError as e:
-            logger.error(f"Validation error: {str(e)}")
-            if attempt == max_retries - 1:
-                raise Exception("We couldn't generate a valid travel plan. Please try rephrasing your request.")
-            continue
+            if attempt < max_retries - 1:
+                time.sleep(0.5)
+                continue
+            raise Exception("Unable to connect to our service. Please try again.")
 
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-            raise Exception("Something went wrong while planning your trip. Please try again.")
+            raise Exception("An error occurred while generating your travel plan. Please try again.")
 
     if last_error:
         raise last_error
 
-def analyze_user_preferences(query: str, selected_response: str):
+def generate_travel_plan(message: str, user_preferences: Dict) -> Dict:
+    """Public interface for travel plan generation with queue management"""
+    try:
+        # Add request to queue
+        request_queue.put((message, user_preferences))
+        return process_request()
+    except Exception as e:
+        logger.error(f"Error in generate_travel_plan: {str(e)}")
+        raise Exception(str(e))
+
+def analyze_user_preferences(query: str, selected_response: str) -> Optional[str]:
     """Analyze user preferences from query and selected response"""
     try:
         response = client.chat.completions.create(
