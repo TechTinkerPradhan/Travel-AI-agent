@@ -3,6 +3,7 @@ from flask import request, jsonify, render_template, redirect, session, url_for
 from flask_login import login_required, current_user
 from services.airtable_service import AirtableService
 from services.openai_service import generate_travel_plan, analyze_user_preferences
+from services.calendar_service import CalendarService
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -13,7 +14,6 @@ def register_routes(app):
 
     # Initialize services
     airtable_service = AirtableService()
-    from services.calendar_service import CalendarService
     calendar_service = CalendarService()
 
     @app.route("/")
@@ -22,6 +22,42 @@ def register_routes(app):
         if not current_user.is_authenticated:
             return redirect(url_for('auth.login'))
         return render_template("index.html")
+
+    @app.route("/api/calendar/status")
+    @login_required
+    def calendar_status():
+        """Check Google Calendar connection status"""
+        try:
+            is_available = calendar_service.check_availability()
+            is_authenticated = 'google_calendar_credentials' in session
+
+            return jsonify({
+                "status": "success",
+                "available": is_available,
+                "authenticated": is_authenticated
+            })
+        except Exception as e:
+            logger.error(f"Error checking calendar status: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/calendar/auth")
+    @login_required
+    def calendar_auth():
+        """Initiate Google Calendar OAuth flow"""
+        try:
+            if not calendar_service.check_availability():
+                return jsonify({
+                    "status": "error",
+                    "message": "Calendar service is not configured properly"
+                }), 503
+
+            authorization_url, state = calendar_service.get_authorization_url()
+            session['calendar_oauth_state'] = state
+            logger.debug(f"Redirecting to authorization URL: {authorization_url}")
+            return redirect(authorization_url)
+        except Exception as e:
+            logger.error(f"Error in calendar auth: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/chat", methods=["POST"])
     @login_required
@@ -76,17 +112,6 @@ def register_routes(app):
             return jsonify({"status": "success"})
         except Exception as e:
             logger.error(f"Error in select_response: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
-
-    @app.route("/calendar_auth")
-    @login_required
-    def calendar_auth():
-        """Initiate Google Calendar OAuth flow."""
-        try:
-            authorization_url, state = calendar_service.get_authorization_url()
-            session['calendar_oauth_state'] = state
-            return redirect(authorization_url)
-        except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/preferences", methods=["POST"])
