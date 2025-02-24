@@ -13,12 +13,25 @@ logger = logging.getLogger(__name__)
 # Separate calendar routes from main routes
 def register_calendar_routes(app):
     """Register calendar-specific routes with separate OAuth flow"""
+    logger.debug("Registering calendar routes...")
     calendar_service = CalendarService()
+
+    @app.route("/api/calendar/status")
+    @login_required
+    def calendar_status():
+        """Check if calendar integration is available"""
+        logger.debug("Calendar status endpoint called")
+        return jsonify({
+            "status": "success",
+            "available": calendar_service.check_availability(),
+            "connected": bool(session.get("google_calendar_credentials"))
+        })
 
     @app.route("/api/calendar/auth")
     @login_required
     def calendar_auth():
         """Initiate Google Calendar OAuth flow with calendar-specific scopes"""
+        logger.debug("Calendar auth endpoint called")
         try:
             if not calendar_service.check_availability():
                 return jsonify({
@@ -37,6 +50,7 @@ def register_calendar_routes(app):
     @login_required
     def calendar_oauth2callback():
         """Handle Google's callback after user consents to Calendar access"""
+        logger.debug("Calendar OAuth callback endpoint called")
         try:
             if not calendar_service.check_availability():
                 return jsonify({
@@ -59,19 +73,11 @@ def register_calendar_routes(app):
             logger.error(f"Error in calendar_oauth2callback: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
-    @app.route("/api/calendar/status")
-    @login_required
-    def calendar_status():
-        """Check if calendar integration is available"""
-        return jsonify({
-            "status": "success",
-            "available": calendar_service.check_availability(),
-            "connected": bool(session.get("google_calendar_credentials"))
-        })
-
+    logger.debug("Calendar routes registered successfully")
 
 def register_routes(app):
     """Register all non-calendar routes with the Flask app"""
+    logger.debug("Registering main application routes...")
 
     # Initialize services
     airtable_service = AirtableService()
@@ -90,9 +96,9 @@ def register_routes(app):
         try:
             data = request.json
             if not data:
-                return jsonify({"status":"error","message":"No data provided"}),400
+                return jsonify({"status": "error", "message": "No data provided"}), 400
 
-            message = data.get("message","").strip()
+            message = data.get("message", "").strip()
             user_id = str(current_user.id)
 
             # Retrieve user preferences from Airtable if they exist
@@ -109,25 +115,25 @@ def register_routes(app):
 
         except Exception as e:
             logger.error(f"Error in chat endpoint: {e}", exc_info=True)
-            return jsonify({"status":"error","message":f"Unexpected error: {e}"}),500
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
     def select_response():
-        """Optional: analyze user preference from selected plan, if needed."""
+        """Analyze user preference from selected plan."""
         try:
             data = request.json
             if not data:
-                return jsonify({"status":"error","message":"No data provided"}),400
+                return jsonify({"status": "error", "message": "No data provided"}), 400
 
-            original_query = data.get("original_query","")
-            selected_response = data.get("selected_response","")
+            original_query = data.get("original_query", "")
+            selected_response = data.get("selected_response", "")
 
             analysis = analyze_user_preferences(original_query, selected_response)
-            return jsonify({"status":"success", "preference_analysis":analysis})
+            return jsonify({"status": "success", "preference_analysis": analysis})
         except Exception as e:
             logger.error(f"Error in select_response: {e}", exc_info=True)
-            return jsonify({"status":"error","message":f"{e}"}),500
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/preferences", methods=["POST"])
     @login_required
@@ -136,13 +142,13 @@ def register_routes(app):
         try:
             data = request.json
             user_id = str(current_user.id)
-            prefs = data.get("preferences",{})
+            prefs = data.get("preferences", {})
 
             airtable_service.save_user_preferences(user_id, prefs)
-            return jsonify({"status":"success"})
+            return jsonify({"status": "success"})
         except Exception as e:
             logger.error(f"Error updating preferences: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/preferences")
     @login_required
@@ -160,4 +166,5 @@ def register_routes(app):
     # Register calendar-specific routes
     register_calendar_routes(app)
 
+    logger.debug("All routes registered successfully")
     return app
