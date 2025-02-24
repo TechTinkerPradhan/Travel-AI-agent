@@ -102,3 +102,41 @@ class AirtableService:
         except Exception as e:
             logging.error(f"Error retrieving user preferences: {str(e)}")
             raise ValueError(f"Failed to retrieve preferences: {str(e)}")
+
+    def save_user_itinerary(self, user_id: str, original_query: str, selected_itinerary: str, user_changes: str = '') -> Dict:
+        """Save user itinerary to Airtable"""
+        try:
+            # Initialize Itineraries table
+            itineraries_table = Table(self.access_token, self.base_id, "Itineraries")
+
+            fields = {
+                'User ID': user_id,
+                'Original Query': original_query,
+                'Selected Itinerary': selected_itinerary,
+                'User Changes': user_changes,
+                'Created Date': datetime.now().isoformat()
+            }
+
+            logging.debug(f"Creating itinerary record for user: {user_id}")
+            record = itineraries_table.create(fields)
+
+            # Update User Preferences table with reference to itinerary
+            existing_user = self.preferences_table.all(
+                formula="{User ID} = '" + user_id.replace("'", "\\'") + "'"
+            )
+
+            if existing_user:
+                user_record = existing_user[0]
+                existing_itineraries = user_record['fields'].get('Travel Itineraries', [])
+                existing_itineraries.append(record['id'])
+                
+                self.preferences_table.update(
+                    user_record['id'],
+                    {'Travel Itineraries': existing_itineraries}
+                )
+
+            return record
+
+        except Exception as e:
+            logging.error(f"Error saving user itinerary: {str(e)}")
+            raise ValueError(f"Failed to save itinerary: {str(e)}")

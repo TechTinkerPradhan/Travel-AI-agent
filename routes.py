@@ -303,6 +303,58 @@ def register_routes(app):
                 'message': 'Failed to complete Google Calendar authorization. Please try again.'
             }), 500
 
+    @app.route('/api/itinerary/save', methods=['POST'])
+    def save_itinerary():
+        """Save selected itinerary to Airtable"""
+        try:
+            logger.debug("Received itinerary save request")
+            data = request.json
+            if not data:
+                logger.error("No data provided in save request")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'No data provided'
+                }), 400
+
+            user_id = data.get('user_id')
+            original_query = data.get('original_query', '')
+            selected_itinerary = data.get('selected_itinerary', '')
+            user_changes = data.get('user_changes', '')
+
+            if not all([user_id, selected_itinerary]):
+                logger.error("Missing required fields in save request")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Missing required fields'
+                }), 400
+
+            # Save to Airtable
+            try:
+                result = airtable_service.save_user_itinerary(
+                    user_id=user_id,
+                    original_query=original_query,
+                    selected_itinerary=selected_itinerary,
+                    user_changes=user_changes
+                )
+                return jsonify({
+                    'status': 'success',
+                    'record_id': result.get('id')
+                })
+            except ValueError as e:
+                logger.error(f"Airtable error: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Failed to save itinerary: {str(e)}'
+                }), 500
+
+        except Exception as e:
+            logger.error(f"Error saving itinerary: {str(e)}", exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'message': f'An unexpected error occurred: {str(e)}'
+            }), 500
+
+
     @app.route('/api/calendar/event', methods=['POST'])
     def create_calendar_event():
         """Create calendar events from itinerary"""

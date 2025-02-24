@@ -224,9 +224,78 @@ document.addEventListener('DOMContentLoaded', function() {
             selectButton.innerHTML = '<i data-feather="loader"></i> Processing...';
             feather.replace();
 
+            // Hide other options
+            const allOptions = document.querySelectorAll('.response-option');
+            allOptions.forEach(option => {
+                if (option !== optionDiv) {
+                    option.style.display = 'none';
+                }
+            });
+
+            // Create confirm plan button
+            const confirmButton = document.createElement('button');
+            confirmButton.className = 'btn btn-success mt-3';
+            confirmButton.innerHTML = '<i data-feather="check"></i> Confirm Plan';
+            optionDiv.appendChild(confirmButton);
+            feather.replace();
+
+            // Ask if user wants to make changes
+            const confirmText = document.createElement('div');
+            confirmText.className = 'mt-3';
+            confirmText.innerHTML = 'Would you like to make any changes to this plan? <br>If yes, please type your changes below:';
+            optionDiv.appendChild(confirmText);
+
+            // Add text area for changes
+            const changesInput = document.createElement('textarea');
+            changesInput.className = 'form-control mt-2';
+            changesInput.placeholder = 'e.g., Add an extra day in Tokyo, or switch Day 2 activities...';
+            optionDiv.appendChild(changesInput);
+
             try {
                 // Get the original query
                 const queryMessage = chatMessages.querySelector('.message.user:last-child')?.textContent;
+
+                // Handle confirmation button click
+                confirmButton.addEventListener('click', async () => {
+                    confirmButton.disabled = true;
+                    confirmButton.innerHTML = '<i data-feather="loader"></i> Saving...';
+                    feather.replace();
+
+                    try {
+                        // Save to Airtable
+                        const response = await fetch('/api/itinerary/save', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                user_id: userId,
+                                original_query: queryMessage,
+                                selected_itinerary: optionData.content,
+                                user_changes: changesInput.value
+                            })
+                        });
+
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            // Check Google Calendar auth status
+                            const calendarStatus = await fetch('/api/calendar/status');
+                            const statusData = await calendarStatus.json();
+
+                            if (!statusData.authenticated) {
+                                window.location.href = '/api/calendar/auth';
+                            } else {
+                                // Create calendar events
+                                createCalendarEventsFromItinerary(optionData.content);
+                            }
+                        } else {
+                            addMessage('Failed to save itinerary: ' + data.message, false, true);
+                        }
+                    } catch (error) {
+                        console.error('Error saving itinerary:', error);
+                        addMessage('Error saving itinerary: ' + error.message, false, true);
+                    }
+                });
 
                 const response = await fetch('/api/chat/select', {
                     method: 'POST',
