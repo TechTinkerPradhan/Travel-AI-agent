@@ -67,6 +67,17 @@ def register_routes(app):
             logger.error(f"Error in select_response: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
+    @app.route("/calendar_auth")
+    @login_required
+    def calendar_auth():
+        """Initiate Google Calendar OAuth flow."""
+        try:
+            authorization_url, state = calendar_service.get_authorization_url()
+            session['calendar_oauth_state'] = state
+            return redirect(authorization_url)
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+
     @app.route("/api/preferences", methods=["POST"])
     @login_required
     def update_preferences():
