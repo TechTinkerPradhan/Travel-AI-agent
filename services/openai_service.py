@@ -49,6 +49,19 @@ def generate_travel_plan(message, user_preferences):
         4. Use consistent markdown formatting throughout
         """
 
+        # Check if this is a refinement request
+        is_refinement = "refine" in message.lower() and "previous plan" in message.lower()
+
+        if is_refinement:
+            system_prompt += """
+            For refinement requests:
+            1. Carefully consider the feedback provided
+            2. Maintain the same format and structure
+            3. Provide two distinct alternatives
+            4. Keep successful elements from the previous plan
+            5. Clearly address the specific refinement requests
+            """
+
         full_prompt = f"""User preferences: {preferences_context}
         User message: {message}
 

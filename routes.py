@@ -119,16 +119,23 @@ def register_routes(app):
             # Generate travel plan
             try:
                 # If this is a refinement, include the previous response in the context
-                if is_refinement:
+                if is_refinement and previous_response:
                     logger.debug("Processing refinement request")
+                    # Extract content from previous response if it's in the alternatives format
+                    if isinstance(previous_response, dict) and "alternatives" in previous_response:
+                        previous_content = previous_response["alternatives"][0]["content"]
+                    else:
+                        previous_content = previous_response
+
                     message = f"""Please refine the following travel plan based on this feedback:
-                Feedback: {message}
 
-                Previous plan:
-                {previous_response}
+Feedback: {message}
 
-                Please keep the same format but adjust the plan according to the feedback.
-                """
+Previous plan:
+{previous_content}
+
+Please keep the same format and provide TWO alternative plans as before, but adjust them according to the feedback.
+"""
 
                 logger.debug(f"Calling OpenAI service with message length: {len(message)}")
                 plan_result = generate_travel_plan(message, prefs)
