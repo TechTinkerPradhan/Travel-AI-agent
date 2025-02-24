@@ -40,6 +40,25 @@
             </div>
         </nav>
 
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Calendar Integration</h5>
+                <div id="calendarStatus">
+                    <p class="text-muted mb-3">Connect your Google Calendar to save travel itineraries</p>
+                    <div class="d-grid gap-2">
+                        <a href="/api/calendar/auth" class="btn btn-outline-primary" id="calendarAuthBtn">
+                            <i data-feather="calendar"></i>
+                            Connect Google Calendar
+                        </a>
+                        <small class="text-muted calendar-status-msg" style="display: none;">
+                            Calendar integration is currently unavailable. Please try again later.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
         <div class="row">
             <div class="col-md-12">
                 <div class="card chat-container">
@@ -103,6 +122,33 @@
         marked.setOptions({
             sanitize: true,
             breaks: true
+        });
+        async function checkCalendarStatus() {
+            try {
+                const response = await fetch('/api/calendar/status');
+                const data = await response.json();
+
+                const calendarBtn = document.getElementById('calendarAuthBtn');
+                const statusMsg = document.querySelector('.calendar-status-msg');
+
+                if (!data.available) {
+                    calendarBtn.classList.add('disabled');
+                    calendarBtn.setAttribute('aria-disabled', 'true');
+                    statusMsg.style.display = 'block';
+                } else if (data.connected) {
+                    calendarBtn.textContent = 'Calendar Connected';
+                    calendarBtn.classList.remove('btn-outline-primary');
+                    calendarBtn.classList.add('btn-success');
+                    calendarBtn.classList.add('disabled');
+                }
+            } catch (error) {
+                console.error('Error checking calendar status:', error);
+            }
+        }
+
+        // Call this when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            checkCalendarStatus();
         });
     </script>
 </body>

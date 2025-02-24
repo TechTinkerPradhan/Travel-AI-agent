@@ -20,32 +20,55 @@ def register_calendar_routes(app):
     def calendar_auth():
         """Initiate Google Calendar OAuth flow with calendar-specific scopes"""
         try:
+            if not calendar_service.check_availability():
+                return jsonify({
+                    "status": "error",
+                    "message": "Calendar integration is not configured. Please try again later."
+                }), 503
+
             auth_url, state = calendar_service.get_authorization_url()
             session["calendar_oauth_state"] = state  # Use separate session key
             return redirect(auth_url)
         except Exception as e:
             logger.error(f"Error in calendar_auth: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/calendar/oauth2callback")
     @login_required
     def calendar_oauth2callback():
         """Handle Google's callback after user consents to Calendar access"""
         try:
+            if not calendar_service.check_availability():
+                return jsonify({
+                    "status": "error",
+                    "message": "Calendar integration is not configured. Please try again later."
+                }), 503
+
             if "error" in request.args:
-                error_msg = request.args.get("error_description","Unknown error")
-                return jsonify({"status":"error","message":f"OAuth error: {error_msg}"}),400
+                error_msg = request.args.get("error_description", "Unknown error")
+                return jsonify({"status": "error", "message": f"OAuth error: {error_msg}"}), 400
 
             state = session.get("calendar_oauth_state")  # Use calendar-specific state
             if not state:
-                return jsonify({"status":"error","message":"Invalid OAuth state"}),400
+                return jsonify({"status": "error", "message": "Invalid OAuth state"}), 400
 
             creds = calendar_service.verify_oauth2_callback(request.url, state)
             session["google_calendar_credentials"] = creds  # Use calendar-specific session key
             return redirect(url_for("index"))
         except Exception as e:
             logger.error(f"Error in calendar_oauth2callback: {e}", exc_info=True)
-            return jsonify({"status":"error","message":str(e)}),500
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/calendar/status")
+    @login_required
+    def calendar_status():
+        """Check if calendar integration is available"""
+        return jsonify({
+            "status": "success",
+            "available": calendar_service.check_availability(),
+            "connected": bool(session.get("google_calendar_credentials"))
+        })
+
 
 def register_routes(app):
     """Register all non-calendar routes with the Flask app"""

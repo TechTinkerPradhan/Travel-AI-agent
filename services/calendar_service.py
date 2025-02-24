@@ -14,20 +14,31 @@ class CalendarService:
         self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID')
         self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET')
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
+        self.is_available = False
 
-        logger.debug("CalendarService initialized with:")
-        logger.debug(f" - Calendar Client ID: {bool(self.client_id)}")
-        logger.debug(f" - Calendar Client Secret: {bool(self.client_secret)}")
+        logger.debug("CalendarService initialization attempt:")
+        logger.debug(f" - Calendar Client ID present: {bool(self.client_id)}")
+        logger.debug(f" - Calendar Client Secret present: {bool(self.client_secret)}")
         logger.debug(f" - Domain: {self.replit_domain}")
 
-        if not all([self.client_id, self.client_secret]):
-            raise ValueError("Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET in env")
+        if all([self.client_id, self.client_secret]):
+            self.is_available = True
+            logger.info("Calendar service initialized successfully")
+        else:
+            logger.warning("Calendar service unavailable - missing credentials")
 
         # Calendar-specific scopes
         self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
+    def check_availability(self):
+        """Check if calendar service is available"""
+        return self.is_available
+
     def get_authorization_url(self):
         """Generate the Google Calendar OAuth2 authorization URL."""
+        if not self.is_available:
+            raise ValueError("Calendar service is not configured - missing credentials")
+
         logger.debug("Generating Google Calendar auth URL...")
 
         redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
@@ -56,10 +67,9 @@ class CalendarService:
         return authorization_url, state
 
     def verify_oauth2_callback(self, request_url, session_state):
-        """Handle the callback from Google with ?code=..."""
-        logger.debug(
-            f"Verifying OAuth callback. request_url={request_url}, state={session_state}"
-        )
+        """Handle the callback from Google with authorization code"""
+        if not self.is_available:
+            raise ValueError("Calendar service is not configured - missing credentials")
 
         redirect_uri = f"https://{self.replit_domain}/api/calendar/oauth2callback"
         client_config = {
@@ -72,9 +82,11 @@ class CalendarService:
             }
         }
 
-        flow = Flow.from_client_config(client_config,
-                                       scopes=self.SCOPES,
-                                       state=session_state)
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=self.SCOPES,
+            state=session_state
+        )
         flow.redirect_uri = redirect_uri
 
         # Force https if needed
@@ -226,6 +238,9 @@ class CalendarService:
         Actually create events in the user's Google Calendar. 
         Returns a list of created event IDs.
         """
+        if not self.is_available:
+            raise ValueError("Calendar service is not configured - missing credentials")
+
         days = self.parse_itinerary(itinerary_content)
         if start_date:
             start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
