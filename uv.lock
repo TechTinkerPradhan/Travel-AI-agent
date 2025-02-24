@@ -1252,6 +1252,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pyairtable" },
     { name = "routes" },
+    { name = "sqlalchemy" },
     { name = "trafilatura" },
     { name = "twilio" },
 ]
@@ -1271,6 +1272,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pyairtable", specifier = ">=3.0.1" },
     { name = "routes", specifier = ">=2.5.1" },
+    { name = "sqlalchemy", specifier = ">=2.0.38" },
     { name = "trafilatura", specifier = ">=2.0.0" },
     { name = "twilio", specifier = ">=9.4.5" },
 ]
