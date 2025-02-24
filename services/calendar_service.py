@@ -137,84 +137,98 @@ class CalendarService:
 
     def parse_itinerary(self, content):
         """Parse markdown itinerary into structured day events"""
-        logger.debug("Parsing itinerary content")
-        days = []
-        current_day = None
-        current_activities = []
+        try:
+            logger.debug("Parsing itinerary content")
+            days = []
+            current_day = None
+            current_activities = []
 
-        # Split content into lines
-        lines = content.split('\n')
+            # Split content into lines
+            lines = content.split('\n')
 
-        # Regular expressions for parsing
-        day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
-        time_pattern = r'(\d{1,2}:\d{2})'
+            # Regular expressions for parsing
+            day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
+            time_pattern = r'(\d{1,2}:\d{2})'
 
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
 
-            # Check for new day
-            day_match = re.search(day_pattern, line)
-            if day_match:
-                # Save previous day if exists
-                if current_day and current_activities:
-                    days.append({
-                        'day_number': current_day['number'],
-                        'title': current_day['title'],
-                        'activities': current_activities.copy()
-                    })
+                # Check for new day
+                day_match = re.search(day_pattern, line)
+                if day_match:
+                    # Save previous day if exists
+                    if current_day and current_activities:
+                        days.append({
+                            'day_number': current_day['number'],
+                            'title': current_day['title'],
+                            'activities': current_activities.copy()
+                        })
 
-                # Start new day
-                current_day = {
-                    'number': int(day_match.group(1)),
-                    'title': day_match.group(2).strip()
-                }
-                current_activities = []
-                continue
+                    # Start new day
+                    current_day = {
+                        'number': int(day_match.group(1)),
+                        'title': day_match.group(2).strip()
+                    }
+                    current_activities = []
+                    continue
 
-            # Look for activities with times
-            if current_day and line.startswith('-'):
-                time_match = re.search(time_pattern, line)
-                if time_match:
-                    time = time_match.group(1)
-                    activity = line[line.index('-')+1:].strip()
-                    if time_match.start() > 0:
-                        activity = line[line.index('-')+1:time_match.start()].strip()
+                # Look for activities with times
+                if current_day and line.startswith('-'):
+                    time_match = re.search(time_pattern, line)
+                    if time_match:
+                        time = time_match.group(1)
+                        activity = line[line.index('-')+1:].strip()
+                        if time_match.start() > 0:
+                            activity = line[line.index('-')+1:time_match.start()].strip()
 
-                    # Extract location if in bold
-                    location = None
-                    location_match = re.search(r'\*\*(.+?)\*\*', activity)
-                    if location_match:
-                        location = location_match.group(1)
+                        # Extract location if in bold
+                        location = None
+                        location_match = re.search(r'\*\*([^*]+?)\*\*', activity)
+                        if location_match:
+                            location = location_match.group(1)
+                            # Remove the location from activity description
+                            activity = activity.replace(f"**{location}**", "")
 
-                    # Extract duration if in parentheses
-                    duration = 60  # default duration in minutes
-                    duration_match = re.search(r'\((\d+)\s*(?:min|hour)s?\)', activity)
-                    if duration_match:
-                        duration_str = duration_match.group(1)
-                        if 'hour' in duration_match.group(0):
-                            duration = int(duration_str) * 60
-                        else:
-                            duration = int(duration_str)
+                        # Extract duration if in parentheses
+                        duration = 60  # default duration in minutes
+                        duration_match = re.search(r'\((\d+)\s*(?:min|hour)s?\)', activity)
+                        if duration_match:
+                            duration_str = duration_match.group(1)
+                            if 'hour' in duration_match.group(0):
+                                duration = int(duration_str) * 60
+                            else:
+                                duration = int(duration_str)
+                            # Remove duration from activity description
+                            activity = activity.replace(duration_match.group(0), '').strip()
 
-                    current_activities.append({
-                        'time': time,
-                        'description': activity,
-                        'location': location,
-                        'duration': duration
-                    })
+                        # Clean up any remaining parentheses and dots
+                        activity = re.sub(r'\s*\([^)]*\)', '', activity)
+                        activity = activity.rstrip('.')
 
-        # Add last day
-        if current_day and current_activities:
-            days.append({
-                'day_number': current_day['number'],
-                'title': current_day['title'],
-                'activities': current_activities
-            })
+                        current_activities.append({
+                            'time': time,
+                            'description': activity,
+                            'location': location,
+                            'duration': duration
+                        })
 
-        logger.debug(f"Parsed {len(days)} days from itinerary")
-        return days
+            # Add last day
+            if current_day and current_activities:
+                days.append({
+                    'day_number': current_day['number'],
+                    'title': current_day['title'],
+                    'activities': current_activities
+                })
+
+            logger.debug(f"Parsed {len(days)} days from itinerary")
+            logger.debug(f"Sample first day activities: {days[0]['activities'] if days else 'No days found'}")
+            return days
+
+        except Exception as e:
+            logger.error(f"Error parsing itinerary: {str(e)}", exc_info=True)
+            raise
 
     def create_calendar_events(self, credentials_dict, itinerary_content, start_date=None):
         """Create calendar events for each day in the itinerary"""
@@ -295,4 +309,36 @@ class CalendarService:
 
         except Exception as e:
             logging.error(f"Error creating calendar event: {str(e)}")
+            raise
+
+    async def create_calendar_preview(self, itinerary_content: str, start_date: str = None):
+        """Create a preview of calendar events for the itinerary"""
+        try:
+            # Parse the itinerary
+            days = self.parse_itinerary(itinerary_content)
+            logger.debug(f"Parsed {len(days)} days from itinerary")
+
+            if not start_date:
+                start_date = datetime.now().date() + timedelta(days=1)
+            else:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+            preview_events = []
+            for day in days:
+                day_date = start_date + timedelta(days=day['day_number'] - 1)
+
+                for activity in day['activities']:
+                    # Format the event details
+                    preview_events.append({
+                        'description': f"Day {day['day_number']}: {activity['description']}",
+                        'location': activity['location'],
+                        'start_time': activity['time'],
+                        'duration': activity['duration']
+                    })
+
+            logger.debug(f"Generated {len(preview_events)} preview events")
+            return preview_events
+
+        except Exception as e:
+            logger.error(f"Error creating calendar preview: {str(e)}", exc_info=True)
             raise

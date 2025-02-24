@@ -292,19 +292,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (data.status === 'success') {
                 const eventsList = document.querySelector('#scheduleModal .events-list');
-                eventsList.innerHTML = data.preview.map(event => `
-                    <div class="card mb-2">
-                        <div class="card-body">
-                            <h6 class="card-title">${event.summary}</h6>
-                            <div class="text-muted">
-                                <small>
-                                    <i data-feather="clock"></i> ${event.start_time} (${event.duration})
-                                    ${event.location ? `<br><i data-feather="map-pin"></i> ${event.location}` : ''}
-                                </small>
+                eventsList.innerHTML = data.preview.map(event => {
+                    const durationText = event.duration >= 60 
+                        ? `${Math.floor(event.duration / 60)} hours${event.duration % 60 ? ` ${event.duration % 60} mins` : ''}`
+                        : `${event.duration} minutes`;
+
+                    return `
+                        <div class="card mb-2">
+                            <div class="card-body">
+                                <h6 class="card-title">${event.description}</h6>
+                                <div class="text-muted">
+                                    <small>
+                                        <i data-feather="clock"></i> ${event.start_time} (${durationText})
+                                        ${event.location ? `<br><i data-feather="map-pin"></i> ${event.location}` : ''}
+                                    </small>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
                 feather.replace();
             }
         } catch (error) {
