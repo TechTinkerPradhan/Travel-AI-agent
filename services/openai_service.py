@@ -17,7 +17,7 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
 # OpenAI Configuration
-DEFAULT_MODEL = "gpt-3.5-turbo"  # Using gpt-3.5-turbo as specified
+DEFAULT_MODEL = "gpt-4"  # Using gpt-3.5-turbo as specified
 DEFAULT_TEMPERATURE = 0.7
 MAX_TOKENS_ITINERARY = 2000
 MAX_TOKENS_ANALYSIS = 1000
@@ -26,10 +26,11 @@ MAX_TOKENS_ANALYSIS = 1000
 MAX_RETRIES = 5
 BASE_DELAY = 1  # Initial delay in seconds
 MAX_DELAY = 32  # Maximum delay in seconds
-JITTER = 0.1   # Random jitter factor
+JITTER = 0.1  # Random jitter factor
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
+
 
 def make_api_call_with_retry(func, *args, **kwargs):
     """
@@ -42,35 +43,36 @@ def make_api_call_with_retry(func, *args, **kwargs):
         except RateLimitError as e:
             retry_count += 1
             if retry_count > MAX_RETRIES:
-                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for rate limit")
+                logger.error(
+                    f"Max retries ({MAX_RETRIES}) exceeded for rate limit")
                 raise Exception(
                     "Service is experiencing high traffic. Please try again in a few minutes."
                 )
 
             # Calculate delay with exponential backoff and jitter
-            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
+            delay = min(BASE_DELAY * (2**(retry_count - 1)), MAX_DELAY)
             jitter_amount = random.uniform(-JITTER * delay, JITTER * delay)
             final_delay = delay + jitter_amount
 
             logger.warning(
                 f"Rate limit hit, attempt {retry_count}/{MAX_RETRIES}. "
-                f"Retrying in {final_delay:.2f} seconds..."
-            )
+                f"Retrying in {final_delay:.2f} seconds...")
             time.sleep(final_delay)
 
         except APIConnectionError as e:
             retry_count += 1
             if retry_count > MAX_RETRIES:
-                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for connection error")
+                logger.error(
+                    f"Max retries ({MAX_RETRIES}) exceeded for connection error"
+                )
                 raise Exception(
                     "Unable to connect to OpenAI services. Please try again later."
                 )
 
-            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
+            delay = min(BASE_DELAY * (2**(retry_count - 1)), MAX_DELAY)
             logger.warning(
                 f"Connection error, attempt {retry_count}/{MAX_RETRIES}. "
-                f"Retrying in {delay} seconds... Error: {str(e)}"
-            )
+                f"Retrying in {delay} seconds... Error: {str(e)}")
             time.sleep(delay)
 
         except APIError as e:
@@ -80,15 +82,16 @@ def make_api_call_with_retry(func, *args, **kwargs):
 
             retry_count += 1
             if retry_count > MAX_RETRIES:
-                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for API error")
-                raise Exception("OpenAI service error. Please try again later.")
+                logger.error(
+                    f"Max retries ({MAX_RETRIES}) exceeded for API error")
+                raise Exception(
+                    "OpenAI service error. Please try again later.")
 
-            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
-            logger.warning(
-                f"API error, attempt {retry_count}/{MAX_RETRIES}. "
-                f"Retrying in {delay} seconds... Error: {str(e)}"
-            )
+            delay = min(BASE_DELAY * (2**(retry_count - 1)), MAX_DELAY)
+            logger.warning(f"API error, attempt {retry_count}/{MAX_RETRIES}. "
+                           f"Retrying in {delay} seconds... Error: {str(e)}")
             time.sleep(delay)
+
 
 def generate_travel_plan(message, user_preferences):
     """
@@ -132,16 +135,17 @@ def generate_travel_plan(message, user_preferences):
         """
 
         logger.debug("Making OpenAI API call with retry mechanism")
-        response = make_api_call_with_retry(
-            client.chat.completions.create,
-            model=DEFAULT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt}
-            ],
-            max_tokens=MAX_TOKENS_ITINERARY,
-            temperature=DEFAULT_TEMPERATURE
-        )
+        response = make_api_call_with_retry(client.chat.completions.create,
+                                            model=DEFAULT_MODEL,
+                                            messages=[{
+                                                "role": "system",
+                                                "content": system_prompt
+                                            }, {
+                                                "role": "user",
+                                                "content": full_prompt
+                                            }],
+                                            max_tokens=MAX_TOKENS_ITINERARY,
+                                            temperature=DEFAULT_TEMPERATURE)
 
         content = response.choices[0].message.content
         logger.debug(f"Received response (length: {len(content)})")
@@ -149,35 +153,36 @@ def generate_travel_plan(message, user_preferences):
         # Split into two plans
         plans = content.split('---')
         if len(plans) != 2:
-            logger.warning("OpenAI didn't return two plans, attempting to split content")
+            logger.warning(
+                "OpenAI didn't return two plans, attempting to split content")
             # Fallback: split content in half
             mid = len(content) // 2
             plans = [content[:mid], content[mid:]]
 
         # Format the response
         formatted_response = {
-            "status": "success",
-            "alternatives": [
-                {
-                    "id": "option_1",
-                    "content": plans[0].strip(),
-                    "type": "itinerary"
-                },
-                {
-                    "id": "option_2",
-                    "content": plans[1].strip(),
-                    "type": "itinerary"
-                }
-            ]
+            "status":
+            "success",
+            "alternatives": [{
+                "id": "option_1",
+                "content": plans[0].strip(),
+                "type": "itinerary"
+            }, {
+                "id": "option_2",
+                "content": plans[1].strip(),
+                "type": "itinerary"
+            }]
         }
 
         # Verify JSON serialization before returning
-        json.dumps(formatted_response)  # This will raise an error if not JSON serializable
+        json.dumps(formatted_response
+                   )  # This will raise an error if not JSON serializable
         return formatted_response
 
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
+
 
 def analyze_user_preferences(query: str, selected_response: str):
     """
@@ -217,20 +222,26 @@ def analyze_user_preferences(query: str, selected_response: str):
         }}
         """
 
-        logger.debug("Making OpenAI API call for preference analysis with retry mechanism")
+        logger.debug(
+            "Making OpenAI API call for preference analysis with retry mechanism"
+        )
         response = make_api_call_with_retry(
             client.chat.completions.create,
             model=DEFAULT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": analysis_prompt}
-            ],
+            messages=[{
+                "role": "system",
+                "content": system_prompt
+            }, {
+                "role": "user",
+                "content": analysis_prompt
+            }],
             max_tokens=MAX_TOKENS_ANALYSIS,
             temperature=0.3  # Lower temperature for more consistent analysis
         )
 
         analysis_result = response.choices[0].message.content
-        logger.debug(f"Received preference analysis (length: {len(analysis_result)})")
+        logger.debug(
+            f"Received preference analysis (length: {len(analysis_result)})")
         return analysis_result
 
     except Exception as e:

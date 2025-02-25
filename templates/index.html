@@ -98,9 +98,16 @@
             breaks: true
         });
 
+        // Debug logging function
+        function debugLog(message, data) {
+            console.log(`[Debug] ${message}:`, data);
+        }
+
         // Chat functionality
         async function handleChatSubmission(message) {
             try {
+                debugLog('Sending chat message', message);
+
                 // Show loading state
                 const loadingDiv = document.createElement('div');
                 loadingDiv.className = 'message system';
@@ -119,30 +126,43 @@
                 // Remove loading message
                 chatMessages.removeChild(loadingDiv);
 
-                let data;
-                const contentType = response.headers.get("content-type");
+                debugLog('Response status', response.status);
+                debugLog('Response headers', Object.fromEntries(response.headers.entries()));
 
-                if (contentType && contentType.includes("application/json")) {
-                    try {
-                        data = await response.json();
-                    } catch (jsonError) {
-                        console.error('JSON Parse Error:', jsonError);
-                        throw new Error('Failed to parse server response');
+                const contentType = response.headers.get("content-type");
+                debugLog('Content-Type', contentType);
+
+                let data;
+                let responseText;
+
+                try {
+                    responseText = await response.text();
+                    debugLog('Raw response text', responseText);
+
+                    if (contentType && contentType.includes("application/json")) {
+                        data = JSON.parse(responseText);
+                        debugLog('Parsed JSON data', data);
+                    } else {
+                        throw new Error('Response was not JSON');
                     }
-                } else {
-                    const text = await response.text();
-                    console.error('Non-JSON response:', text);
-                    throw new Error('Unexpected server response format');
+                } catch (parseError) {
+                    debugLog('Parse error', parseError);
+                    console.error('Raw response:', responseText);
+                    throw new Error('Failed to parse server response');
                 }
 
                 if (!response.ok) {
                     throw new Error(data.message || 'Server error occurred');
                 }
 
+                if (!data.status || !data.alternatives) {
+                    throw new Error('Invalid response format from server');
+                }
+
                 return data;
             } catch (error) {
-                console.error('Chat submission error:', error);
-                throw new Error(error.message || 'Failed to process your request. Please try again.');
+                debugLog('Error in handleChatSubmission', error);
+                throw error;
             }
         }
 
@@ -169,6 +189,7 @@
 
                 try {
                     const response = await handleChatSubmission(message);
+                    debugLog('Chat response', response);
 
                     if (response.status === 'success' && response.alternatives) {
                         // Display each alternative plan
@@ -179,9 +200,10 @@
                             chatMessages.appendChild(planDiv);
                         });
                     } else {
-                        throw new Error(response.message || 'Failed to generate travel plans');
+                        throw new Error('Invalid response format from server');
                     }
                 } catch (error) {
+                    debugLog('Error in chat submission', error);
                     // Add error message to chat
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'message error';
@@ -194,13 +216,12 @@
             });
         });
 
-        // Calendar status check
+        // Calendar functionality
         async function checkCalendarStatus() {
             try {
-                console.log('Checking calendar status...');
                 const response = await fetch('/api/calendar/status');
                 const data = await response.json();
-                console.log('Calendar status response:', data);
+                debugLog('Calendar status', data);
 
                 const calendarBtn = document.getElementById('calendarAuthBtn');
                 const statusMsg = document.querySelector('.calendar-status-msg');
@@ -208,7 +229,6 @@
                 const errorDetails = document.querySelector('.calendar-error-details');
 
                 if (!data.available) {
-                    console.error('Calendar service unavailable:', data);
                     calendarBtn.classList.add('disabled');
                     calendarBtn.setAttribute('aria-disabled', 'true');
                     statusMsg.style.display = 'block';
@@ -217,14 +237,13 @@
                         errorDetails.textContent = `Error: ${data.message}`;
                     }
                 } else if (data.authenticated) {
-                    console.log('Calendar service authenticated');
                     calendarBtn.textContent = 'Calendar Connected';
                     calendarBtn.classList.remove('btn-outline-primary');
                     calendarBtn.classList.add('btn-success');
                     calendarBtn.classList.add('disabled');
                 }
             } catch (error) {
-                console.error('Error checking calendar status:', error);
+                debugLog('Calendar status error', error);
                 const errorDiv = document.getElementById('calendarErrors');
                 const errorDetails = document.querySelector('.calendar-error-details');
                 errorDiv.style.display = 'block';
@@ -234,18 +253,14 @@
 
         // Clear calendar errors on button click
         document.getElementById('calendarAuthBtn').addEventListener('click', function(e) {
-            console.log('Calendar auth button clicked');
             const errorDiv = document.getElementById('calendarErrors');
             const errorDetails = document.querySelector('.calendar-error-details');
             errorDiv.style.display = 'none';
             errorDetails.textContent = '';
         });
 
-        // Check calendar status on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('Page loaded, checking calendar status...');
-            checkCalendarStatus();
-        });
+        // Initialize calendar status check
+        document.addEventListener('DOMContentLoaded', checkCalendarStatus);
     </script>
 
     <style>

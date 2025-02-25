@@ -95,7 +95,20 @@ def register_routes(app):
     def chat():
         """Handle user chat message to generate itinerary plan or refine it."""
         try:
-            data = request.get_json()
+            # Log incoming request
+            logger.debug("Received chat request")
+
+            # Parse JSON request
+            try:
+                data = request.get_json()
+                logger.debug(f"Request data: {data}")
+            except Exception as e:
+                logger.error(f"Failed to parse JSON request: {e}")
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid JSON in request"
+                }), 400
+
             if not data:
                 return jsonify({
                     "status": "error",
@@ -110,41 +123,53 @@ def register_routes(app):
                 }), 400
 
             user_id = str(current_user.id)
+            logger.debug(f"Processing message for user {user_id}")
 
-            # Retrieve user preferences from Airtable if they exist
+            # Retrieve user preferences
             prefs = {}
             try:
                 user_prefs = airtable_service.get_user_preferences(user_id)
                 if user_prefs:
                     prefs = user_prefs
+                    logger.debug(f"Retrieved user preferences: {prefs}")
             except Exception as e:
                 logger.warning(f"Could not fetch preferences for {user_id}: {e}")
 
+            # Generate travel plan
             try:
+                logger.debug("Calling generate_travel_plan")
                 plan_result = generate_travel_plan(message, prefs)
+
+                # Validate response format
                 if not isinstance(plan_result, dict):
-                    raise ValueError("Invalid response format from travel plan generator")
+                    logger.error(f"Invalid response type: {type(plan_result)}")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Invalid response format from travel plan generator"
+                    }), 500
 
-                # Verify the response format
                 if "status" not in plan_result or "alternatives" not in plan_result:
-                    raise ValueError("Missing required fields in travel plan response")
+                    logger.error(f"Missing required fields in response: {plan_result}")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Invalid response format from travel plan generator"
+                    }), 500
 
+                logger.debug("Successfully generated travel plan")
                 return jsonify(plan_result)
+
             except Exception as e:
                 logger.error(f"Error generating travel plan: {e}", exc_info=True)
-                error_msg = str(e)
-                if '<html>' in error_msg:
-                    error_msg = "Server encountered an unexpected error. Please try again."
                 return jsonify({
                     "status": "error",
-                    "message": error_msg
+                    "message": str(e)
                 }), 500
 
         except Exception as e:
-            logger.error(f"Error in chat endpoint: {e}", exc_info=True)
+            logger.error(f"Unhandled error in chat endpoint: {e}", exc_info=True)
             return jsonify({
                 "status": "error",
-                "message": "An unexpected error occurred. Please try again."
+                "message": "An unexpected error occurred"
             }), 500
 
     @app.route("/api/chat/select", methods=["POST"])
@@ -160,7 +185,10 @@ def register_routes(app):
             original_query = data.get("original_query")
 
             if not content or not original_query:
-                return jsonify({"status": "error", "message": "Missing content or original query"}), 400
+                return jsonify({
+                    "status": "error",
+                    "message": "Missing content or original query"
+                }), 400
 
             # Save to Airtable
             airtable_service.save_user_itinerary(
