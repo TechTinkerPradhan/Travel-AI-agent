@@ -97,6 +97,7 @@ def generate_travel_plan(message, user_preferences):
         }
 
         return formatted_response
+
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")

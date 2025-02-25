@@ -1,7 +1,6 @@
 import logging
 import os
 from flask import request, jsonify, render_template, redirect, session, url_for
-from flask_login import login_required, current_user
 from services.airtable_service import AirtableService
 from services.openai_service import generate_travel_plan
 from services.calendar_service import CalendarService
@@ -19,13 +18,10 @@ def register_routes(app):
 
     @app.route("/")
     def index():
-        """Show login page if not authenticated, otherwise show main app"""
-        if not current_user.is_authenticated:
-            return render_template("login.html")
+        """Show main page directly for development"""
         return render_template("index.html")
 
     @app.route("/api/calendar/status")
-    @login_required
     def calendar_status():
         """Check Google Calendar connection status"""
         try:
@@ -79,7 +75,6 @@ def register_routes(app):
             return jsonify({"status": "error", "message": error_msg}), 500
 
     @app.route("/api/chat", methods=["POST"])
-    @login_required
     def chat():
         """Handle user chat message to generate itinerary plan"""
         try:
@@ -99,7 +94,7 @@ def register_routes(app):
                     "message": "Message cannot be empty"
                 }), 400
 
-            user_id = str(current_user.id)
+            user_id = data.get("user_id", "default_user")
             logger.debug(f"Processing chat request for user {user_id}: {message[:50]}...")
 
             # Get user preferences (empty for development)
