@@ -17,18 +17,82 @@ if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
 # OpenAI Configuration
-DEFAULT_MODEL = "gpt-3.5-turbo"  # Can be changed to "gpt-3.5-turbo" if needed
+DEFAULT_MODEL = "gpt-3.5-turbo"  # Using gpt-3.5-turbo as specified
 DEFAULT_TEMPERATURE = 0.7
 MAX_TOKENS_ITINERARY = 2000
 MAX_TOKENS_ANALYSIS = 1000
 
+# Retry Configuration
+MAX_RETRIES = 5
+BASE_DELAY = 1  # Initial delay in seconds
+MAX_DELAY = 32  # Maximum delay in seconds
+JITTER = 0.1   # Random jitter factor
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
 
+def make_api_call_with_retry(func, *args, **kwargs):
+    """
+    Generic retry mechanism for OpenAI API calls with exponential backoff
+    """
+    retry_count = 0
+    while True:
+        try:
+            return func(*args, **kwargs)
+        except RateLimitError as e:
+            retry_count += 1
+            if retry_count > MAX_RETRIES:
+                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for rate limit")
+                raise Exception(
+                    "Service is experiencing high traffic. Please try again in a few minutes."
+                )
+
+            # Calculate delay with exponential backoff and jitter
+            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
+            jitter_amount = random.uniform(-JITTER * delay, JITTER * delay)
+            final_delay = delay + jitter_amount
+
+            logger.warning(
+                f"Rate limit hit, attempt {retry_count}/{MAX_RETRIES}. "
+                f"Retrying in {final_delay:.2f} seconds..."
+            )
+            time.sleep(final_delay)
+
+        except APIConnectionError as e:
+            retry_count += 1
+            if retry_count > MAX_RETRIES:
+                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for connection error")
+                raise Exception(
+                    "Unable to connect to OpenAI services. Please try again later."
+                )
+
+            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
+            logger.warning(
+                f"Connection error, attempt {retry_count}/{MAX_RETRIES}. "
+                f"Retrying in {delay} seconds... Error: {str(e)}"
+            )
+            time.sleep(delay)
+
+        except APIError as e:
+            if "invalid_request_error" in str(e).lower():
+                logger.error(f"Invalid request error: {str(e)}")
+                raise Exception(f"Invalid request: {str(e)}")
+
+            retry_count += 1
+            if retry_count > MAX_RETRIES:
+                logger.error(f"Max retries ({MAX_RETRIES}) exceeded for API error")
+                raise Exception("OpenAI service error. Please try again later.")
+
+            delay = min(BASE_DELAY * (2 ** (retry_count - 1)), MAX_DELAY)
+            logger.warning(
+                f"API error, attempt {retry_count}/{MAX_RETRIES}. "
+                f"Retrying in {delay} seconds... Error: {str(e)}"
+            )
+            time.sleep(delay)
 
 def generate_travel_plan(message, user_preferences):
     """
-    Generate multiple travel recommendations using OpenAI's API
+    Generate multiple travel recommendations using OpenAI's API with retry mechanism
     """
     try:
         logger.debug("Starting travel plan generation")
@@ -68,18 +132,17 @@ def generate_travel_plan(message, user_preferences):
         3. Cost considerations where applicable
         """
 
-        logger.debug("Making OpenAI API call")
-        response = client.chat.completions.create(
+        logger.debug("Making OpenAI API call with retry mechanism")
+        response = make_api_call_with_retry(
+            client.chat.completions.create,
             model=DEFAULT_MODEL,
-            messages=[{
-                "role": "system",
-                "content": system_prompt
-            }, {
-                "role": "user",
-                "content": full_prompt
-            }],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": full_prompt}
+            ],
             max_tokens=MAX_TOKENS_ITINERARY,
-            temperature=DEFAULT_TEMPERATURE)
+            temperature=DEFAULT_TEMPERATURE
+        )
 
         content = response.choices[0].message.content
         logger.debug(f"Received response (length: {len(content)})")
@@ -87,41 +150,33 @@ def generate_travel_plan(message, user_preferences):
         # Split into two plans
         plans = content.split('---')
         if len(plans) != 2:
-            logger.warning(
-                "OpenAI didn't return two plans, attempting to split content")
+            logger.warning("OpenAI didn't return two plans, attempting to split content")
             # Fallback: split content in half
             mid = len(content) // 2
             plans = [content[:mid], content[mid:]]
 
-        # Format the response as JSON
+        # Format the response
         formatted_response = {
-            "status":
-            "success",
-            "alternatives": [{
-                "id": "option_1",
-                "content": plans[0].strip(),
-                "type": "itinerary"
-            }, {
-                "id": "option_2",
-                "content": plans[1].strip(),
-                "type": "itinerary"
-            }]
+            "status": "success",
+            "alternatives": [
+                {
+                    "id": "option_1",
+                    "content": plans[0].strip(),
+                    "type": "itinerary"
+                },
+                {
+                    "id": "option_2",
+                    "content": plans[1].strip(),
+                    "type": "itinerary"
+                }
+            ]
         }
 
         return formatted_response
 
-    except RateLimitError as e:
-        logger.error(f"Rate limit error: {str(e)}")
-        raise Exception(
-            "We're experiencing high traffic. Please wait 30 seconds and try again."
-        )
-    except (APIError, APIConnectionError) as e:
-        logger.error(f"OpenAI API error: {str(e)}")
-        raise Exception(f"Failed to generate travel plan: {str(e)}")
     except Exception as e:
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
-
 
 def analyze_user_preferences(query: str, selected_response: str):
     """
@@ -138,8 +193,6 @@ def analyze_user_preferences(query: str, selected_response: str):
         if not analyzer:
             logger.error("Preference analyzer agent not found")
             raise ValueError("Preference analyzer agent not found")
-
-        logger.debug("Successfully retrieved preference analyzer agent")
 
         system_prompt = analyzer.system_prompt
         analysis_prompt = f"""
@@ -163,23 +216,20 @@ def analyze_user_preferences(query: str, selected_response: str):
         }}
         """
 
-        logger.debug("Making OpenAI API call for preference analysis")
-        response = client.chat.completions.create(
+        logger.debug("Making OpenAI API call for preference analysis with retry mechanism")
+        response = make_api_call_with_retry(
+            client.chat.completions.create,
             model=DEFAULT_MODEL,
-            messages=[{
-                "role": "system",
-                "content": system_prompt
-            }, {
-                "role": "user",
-                "content": analysis_prompt
-            }],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": analysis_prompt}
+            ],
             max_tokens=MAX_TOKENS_ANALYSIS,
             temperature=0.3  # Lower temperature for more consistent analysis
         )
 
         analysis_result = response.choices[0].message.content
-        logger.debug(
-            f"Received preference analysis (length: {len(analysis_result)})")
+        logger.debug(f"Received preference analysis (length: {len(analysis_result)})")
         return analysis_result
 
     except Exception as e:
