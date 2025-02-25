@@ -28,12 +28,79 @@ def register_routes(app):
         logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-    @app.route("/")
-    def index():
-        """Redirect to login if not authenticated, otherwise show main page"""
-        if not current_user.is_authenticated:
-            return redirect(url_for('auth.login'))
-        return render_template("index.html")
+    @app.route("/api/chat", methods=["POST"])
+    @login_required
+    def chat():
+        """Handle user chat message to generate itinerary plan."""
+        try:
+            logger.debug("Received chat request")
+
+            # Validate request JSON
+            if not request.is_json:
+                logger.error("Request is not JSON")
+                return jsonify({
+                    "status": "error",
+                    "message": "Request must be JSON"
+                }), 400
+
+            data = request.get_json()
+            if not data or not isinstance(data, dict):
+                logger.error("Invalid JSON data structure")
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid JSON data structure"
+                }), 400
+
+            message = data.get("message", "").strip()
+            if not message:
+                logger.error("Empty message received")
+                return jsonify({
+                    "status": "error",
+                    "message": "Message cannot be empty"
+                }), 400
+
+            user_id = str(current_user.id)
+            logger.debug(f"Processing chat request for user {user_id}")
+
+            # Get user preferences
+            prefs = {}
+            try:
+                user_prefs = airtable_service.get_user_preferences(user_id)
+                if user_prefs:
+                    prefs = user_prefs
+                    logger.debug(f"Retrieved user preferences: {prefs}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch preferences: {e}")
+
+            # Generate travel plan
+            try:
+                plan_result = generate_travel_plan(message, prefs)
+
+                # Validate response structure
+                if not isinstance(plan_result, dict):
+                    raise ValueError("Invalid response type from travel plan generator")
+
+                if "status" not in plan_result or "alternatives" not in plan_result:
+                    raise ValueError("Missing required fields in travel plan response")
+
+                # Ensure JSON serialization works
+                response = jsonify(plan_result)
+                response.headers['Content-Type'] = 'application/json'
+                return response
+
+            except Exception as e:
+                logger.error(f"Travel plan generation error: {e}", exc_info=True)
+                return jsonify({
+                    "status": "error",
+                    "message": str(e)
+                }), 500
+
+        except Exception as e:
+            logger.error(f"Unhandled chat endpoint error: {e}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": "An unexpected error occurred"
+            }), 500
 
     @app.route("/api/calendar/status")
     @login_required
@@ -89,88 +156,6 @@ def register_routes(app):
             error_msg = f"Error in calendar auth: {str(e)}"
             logger.error(error_msg, exc_info=True)
             return jsonify({"status": "error", "message": error_msg}), 500
-
-    @app.route("/api/chat", methods=["POST"])
-    @login_required
-    def chat():
-        """Handle user chat message to generate itinerary plan or refine it."""
-        try:
-            # Log incoming request
-            logger.debug("Received chat request")
-
-            # Parse JSON request
-            try:
-                data = request.get_json()
-                logger.debug(f"Request data: {data}")
-            except Exception as e:
-                logger.error(f"Failed to parse JSON request: {e}")
-                return jsonify({
-                    "status": "error",
-                    "message": "Invalid JSON in request"
-                }), 400
-
-            if not data:
-                return jsonify({
-                    "status": "error",
-                    "message": "No data provided"
-                }), 400
-
-            message = data.get("message", "").strip()
-            if not message:
-                return jsonify({
-                    "status": "error",
-                    "message": "Message cannot be empty"
-                }), 400
-
-            user_id = str(current_user.id)
-            logger.debug(f"Processing message for user {user_id}")
-
-            # Retrieve user preferences
-            prefs = {}
-            try:
-                user_prefs = airtable_service.get_user_preferences(user_id)
-                if user_prefs:
-                    prefs = user_prefs
-                    logger.debug(f"Retrieved user preferences: {prefs}")
-            except Exception as e:
-                logger.warning(f"Could not fetch preferences for {user_id}: {e}")
-
-            # Generate travel plan
-            try:
-                logger.debug("Calling generate_travel_plan")
-                plan_result = generate_travel_plan(message, prefs)
-
-                # Validate response format
-                if not isinstance(plan_result, dict):
-                    logger.error(f"Invalid response type: {type(plan_result)}")
-                    return jsonify({
-                        "status": "error",
-                        "message": "Invalid response format from travel plan generator"
-                    }), 500
-
-                if "status" not in plan_result or "alternatives" not in plan_result:
-                    logger.error(f"Missing required fields in response: {plan_result}")
-                    return jsonify({
-                        "status": "error",
-                        "message": "Invalid response format from travel plan generator"
-                    }), 500
-
-                logger.debug("Successfully generated travel plan")
-                return jsonify(plan_result)
-
-            except Exception as e:
-                logger.error(f"Error generating travel plan: {e}", exc_info=True)
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 500
-
-        except Exception as e:
-            logger.error(f"Unhandled error in chat endpoint: {e}", exc_info=True)
-            return jsonify({
-                "status": "error",
-                "message": "An unexpected error occurred"
-            }), 500
 
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
@@ -228,6 +213,13 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error fetching preferences: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/")
+    def index():
+        """Redirect to login if not authenticated, otherwise show main page"""
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        return render_template("index.html")
 
     logger.debug("All routes registered successfully")
     return app
