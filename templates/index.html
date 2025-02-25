@@ -62,6 +62,16 @@
             </div>
         </div>
 
+        <!-- Your Travel Plans Section -->
+        <div class="card mb-4" id="yourPlansSection" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title">Your Travel Plans</h5>
+                <div id="plansList" class="list-group">
+                    <!-- Plans will be dynamically inserted here -->
+                </div>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-12">
                 <div class="card chat-container">
@@ -86,6 +96,28 @@
         </div>
     </div>
 
+    <!-- Date Selection Modal -->
+    <div class="modal fade" id="dateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Start Date</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="startDate" class="form-label">When would you like to start your trip?</label>
+                        <input type="date" class="form-control" id="startDate" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmDate">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
@@ -98,16 +130,13 @@
             breaks: true
         });
 
-        // Debug logging function
-        function debugLog(message, data) {
-            console.log(`[Debug] ${message}:`, data);
-        }
+        let currentPlanData = null;
+        let selectedPlanId = null;
+        let originalQuery = null;
 
         // Chat functionality
         async function handleChatSubmission(message) {
             try {
-                debugLog('Sending chat message', message);
-
                 // Show loading state
                 const loadingDiv = document.createElement('div');
                 loadingDiv.className = 'message system';
@@ -126,44 +155,177 @@
                 // Remove loading message
                 chatMessages.removeChild(loadingDiv);
 
-                debugLog('Response status', response.status);
-                debugLog('Response headers', Object.fromEntries(response.headers.entries()));
-
-                const contentType = response.headers.get("content-type");
-                debugLog('Content-Type', contentType);
-
-                let data;
-                let responseText;
-
-                try {
-                    responseText = await response.text();
-                    debugLog('Raw response text', responseText);
-
-                    if (contentType && contentType.includes("application/json")) {
-                        data = JSON.parse(responseText);
-                        debugLog('Parsed JSON data', data);
-                    } else {
-                        throw new Error('Response was not JSON');
-                    }
-                } catch (parseError) {
-                    debugLog('Parse error', parseError);
-                    console.error('Raw response:', responseText);
-                    throw new Error('Failed to parse server response');
-                }
-
                 if (!response.ok) {
-                    throw new Error(data.message || 'Server error occurred');
+                    throw new Error('Server error occurred');
                 }
 
-                if (!data.status || !data.alternatives) {
+                const data = await response.json();
+
+                if (data.status === 'success' && data.alternatives) {
+                    originalQuery = message;
+                    currentPlanData = data;
+                    return data;
+                } else {
                     throw new Error('Invalid response format from server');
                 }
-
-                return data;
             } catch (error) {
-                debugLog('Error in handleChatSubmission', error);
+                console.error('Chat submission error:', error);
                 throw error;
             }
+        }
+
+        function createPlanElement(plan, index) {
+            const planDiv = document.createElement('div');
+            planDiv.className = 'plan-option mb-4 p-3 border rounded';
+            planDiv.setAttribute('data-plan-id', plan.id);
+
+            const content = marked.parse(plan.content);
+
+            planDiv.innerHTML = `
+                ${content}
+                <div class="mt-3">
+                    <button class="btn btn-primary select-plan-btn" data-plan-id="${plan.id}">
+                        Select This Plan
+                    </button>
+                </div>
+            `;
+
+            return planDiv;
+        }
+
+        function showPlanActions(planId) {
+            const allPlans = document.querySelectorAll('.plan-option');
+            allPlans.forEach(plan => {
+                if (plan.getAttribute('data-plan-id') === planId) {
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'plan-actions mt-3';
+                    actionsDiv.innerHTML = `
+                        <button class="btn btn-primary me-2" id="refinePlanBtn">
+                            <i data-feather="edit-2"></i> Refine Plan
+                        </button>
+                        <button class="btn btn-success" id="confirmPlanBtn">
+                            <i data-feather="check"></i> Confirm Plan
+                        </button>
+                    `;
+                    plan.appendChild(actionsDiv);
+                    feather.replace();
+
+                    // Add event listeners
+                    document.getElementById('refinePlanBtn').addEventListener('click', () => refinePlan());
+                    document.getElementById('confirmPlanBtn').addEventListener('click', () => confirmPlan());
+                } else {
+                    plan.style.display = 'none';
+                }
+            });
+        }
+
+        async function refinePlan() {
+            const refineMessage = prompt('What would you like to adjust in the plan?');
+            if (refineMessage) {
+                try {
+                    const response = await handleChatSubmission(refineMessage);
+                    displayNewPlans(response);
+                } catch (error) {
+                    console.error('Error refining plan:', error);
+                    alert('Failed to refine plan. Please try again.');
+                }
+            }
+        }
+
+        function confirmPlan() {
+            const dateModal = new bootstrap.Modal(document.getElementById('dateModal'));
+            dateModal.show();
+        }
+
+        document.getElementById('confirmDate').addEventListener('click', async () => {
+            const startDate = document.getElementById('startDate').value;
+            if (!startDate) {
+                alert('Please select a start date');
+                return;
+            }
+
+            const selectedPlan = currentPlanData.alternatives.find(p => p.id === selectedPlanId);
+            if (!selectedPlan) {
+                alert('No plan selected');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/chat/select', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        plan_id: selectedPlanId,
+                        content: selectedPlan.content,
+                        start_date: startDate,
+                        original_query: originalQuery
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to save plan');
+                }
+
+                const dateModal = bootstrap.Modal.getInstance(document.getElementById('dateModal'));
+                dateModal.hide();
+
+                // Show add to calendar button
+                const selectedPlanDiv = document.querySelector(`[data-plan-id="${selectedPlanId}"]`);
+                const calendarBtn = document.createElement('button');
+                calendarBtn.className = 'btn btn-success mt-3';
+                calendarBtn.innerHTML = '<i data-feather="calendar"></i> Add to Google Calendar';
+                calendarBtn.addEventListener('click', () => addToCalendar(startDate));
+                selectedPlanDiv.appendChild(calendarBtn);
+                feather.replace();
+
+            } catch (error) {
+                console.error('Error saving plan:', error);
+                alert('Failed to save plan. Please try again.');
+            }
+        });
+
+        async function addToCalendar(startDate) {
+            try {
+                const response = await fetch('/api/calendar/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        plan_id: selectedPlanId,
+                        start_date: startDate
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to add to calendar');
+                }
+
+                alert('Successfully added to your Google Calendar!');
+            } catch (error) {
+                console.error('Error adding to calendar:', error);
+                alert('Failed to add to calendar. Please try again.');
+            }
+        }
+
+        function displayNewPlans(response) {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = '';
+
+            response.alternatives.forEach((alt, index) => {
+                const planDiv = createPlanElement(alt, index);
+                chatMessages.appendChild(planDiv);
+            });
+
+            // Add event listeners to new select buttons
+            document.querySelectorAll('.select-plan-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    selectedPlanId = button.getAttribute('data-plan-id');
+                    showPlanActions(selectedPlanId);
+                });
+            });
         }
 
         // Initialize chat functionality
@@ -189,21 +351,8 @@
 
                 try {
                     const response = await handleChatSubmission(message);
-                    debugLog('Chat response', response);
-
-                    if (response.status === 'success' && response.alternatives) {
-                        // Display each alternative plan
-                        response.alternatives.forEach((alt) => {
-                            const planDiv = document.createElement('div');
-                            planDiv.className = 'message system';
-                            planDiv.innerHTML = marked.parse(alt.content);
-                            chatMessages.appendChild(planDiv);
-                        });
-                    } else {
-                        throw new Error('Invalid response format from server');
-                    }
+                    displayNewPlans(response);
                 } catch (error) {
-                    debugLog('Error in chat submission', error);
                     // Add error message to chat
                     const errorDiv = document.createElement('div');
                     errorDiv.className = 'message error';
@@ -214,6 +363,9 @@
                 // Scroll to bottom
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             });
+
+            // Initialize calendar status check
+            checkCalendarStatus();
         });
 
         // Calendar functionality
@@ -221,7 +373,6 @@
             try {
                 const response = await fetch('/api/calendar/status');
                 const data = await response.json();
-                debugLog('Calendar status', data);
 
                 const calendarBtn = document.getElementById('calendarAuthBtn');
                 const statusMsg = document.querySelector('.calendar-status-msg');
@@ -243,7 +394,6 @@
                     calendarBtn.classList.add('disabled');
                 }
             } catch (error) {
-                debugLog('Calendar status error', error);
                 const errorDiv = document.getElementById('calendarErrors');
                 const errorDetails = document.querySelector('.calendar-error-details');
                 errorDiv.style.display = 'block';
@@ -258,9 +408,6 @@
             errorDiv.style.display = 'none';
             errorDetails.textContent = '';
         });
-
-        // Initialize calendar status check
-        document.addEventListener('DOMContentLoaded', checkCalendarStatus);
     </script>
 
     <style>
@@ -291,6 +438,17 @@
         .chat-input {
             padding: 10px;
             border-top: 1px solid #4a5568;
+        }
+        .plan-option {
+            background-color: #2d3748;
+            transition: all 0.3s ease;
+        }
+        .plan-option:hover {
+            background-color: #374151;
+        }
+        .plan-actions {
+            border-top: 1px solid #4a5568;
+            padding-top: 1rem;
         }
     </style>
 </body>

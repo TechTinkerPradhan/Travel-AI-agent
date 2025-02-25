@@ -134,32 +134,93 @@ def register_routes(app):
 
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
-    def select_response():
-        """Save selected itinerary."""
+    def select_plan():
+        """Handle plan selection and save to database."""
         try:
             data = request.get_json()
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
-            content = data.get("content")
-            original_query = data.get("original_query")
-
-            if not content or not original_query:
+            required_fields = ['plan_id', 'content', 'start_date', 'original_query']
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
                 return jsonify({
                     "status": "error",
-                    "message": "Missing content or original query"
+                    "message": f"Missing required fields: {', '.join(missing_fields)}"
                 }), 400
 
             # Save to Airtable
             airtable_service.save_user_itinerary(
                 user_id=str(current_user.id),
-                original_query=original_query,
-                selected_itinerary=content
+                original_query=data['original_query'],
+                selected_itinerary=data['content'],
+                start_date=data['start_date']
             )
 
             return jsonify({"status": "success"})
         except Exception as e:
-            logger.error(f"Error in select_response: {e}", exc_info=True)
+            logger.error(f"Error in select_plan: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/calendar/add", methods=["POST"])
+    @login_required
+    def add_to_calendar():
+        """Add selected plan to Google Calendar."""
+        try:
+            if not calendar_service.check_availability():
+                return jsonify({
+                    "status": "error",
+                    "message": "Calendar service is not available"
+                }), 503
+
+            data = request.get_json()
+            if not data or 'plan_id' not in data or 'start_date' not in data:
+                return jsonify({
+                    "status": "error",
+                    "message": "Missing required data"
+                }), 400
+
+            # Get the plan from Airtable
+            plan = airtable_service.get_user_itinerary(
+                user_id=str(current_user.id),
+                plan_id=data['plan_id']
+            )
+
+            if not plan:
+                return jsonify({
+                    "status": "error",
+                    "message": "Plan not found"
+                }), 404
+
+            # Create calendar events
+            events = calendar_service.create_events_from_plan(
+                plan['content'],
+                start_date=data['start_date'],
+                user_email=current_user.email
+            )
+
+            return jsonify({
+                "status": "success",
+                "message": "Successfully added to calendar",
+                "events": events
+            })
+
+        except Exception as e:
+            logger.error(f"Error adding to calendar: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/plans", methods=["GET"])
+    @login_required
+    def get_user_plans():
+        """Get all travel plans for the current user."""
+        try:
+            plans = airtable_service.get_user_itineraries(str(current_user.id))
+            return jsonify({
+                "status": "success",
+                "plans": plans
+            })
+        except Exception as e:
+            logger.error(f"Error fetching user plans: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
     @app.route("/api/preferences", methods=["POST"])
