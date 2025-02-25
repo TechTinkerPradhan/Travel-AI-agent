@@ -18,19 +18,28 @@ class CalendarService:
         logger.debug("=== Calendar Service Initialization ===")
         logger.debug(f"Using domain: {self.replit_domain}")
 
-        # Use .get() with empty string defaults for safety
-        self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
-        self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
+        # Get credentials with proper error handling
+        try:
+            self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
+            self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
 
-        # Log credential information safely (only lengths)
-        logger.debug(f"Client ID length: {len(self.client_id)}")
-        logger.debug(f"Client Secret length: {len(self.client_secret)}")
+            # Log credential information safely (only lengths)
+            logger.debug(f"Client ID length: {len(self.client_id)}")
+            logger.debug(f"Client Secret length: {len(self.client_secret)}")
 
-        # Enhanced credential validation
-        self.validate_credentials()
+            # Enhanced credential validation
+            self.validate_credentials()
 
-        # Define Google Calendar scopes
-        self.SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+            # Define all required Google OAuth scopes
+            self.SCOPES = [
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/userinfo.profile',
+                'openid'
+            ]
+        except Exception as e:
+            logger.error(f"Error initializing calendar service: {str(e)}")
+            self.is_available = False
 
     def validate_credentials(self):
         """Validate the format and presence of credentials"""
@@ -72,17 +81,17 @@ class CalendarService:
         redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
         logger.debug(f"Using redirect URI: {redirect_uri}")
 
-        client_config = {
-            "web": {
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [redirect_uri]
-            }
-        }
-
         try:
+            client_config = {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [redirect_uri]
+                }
+            }
+
             flow = Flow.from_client_config(client_config, scopes=self.SCOPES)
             flow.redirect_uri = redirect_uri
 

@@ -32,8 +32,8 @@ def register_routes(app):
             is_authenticated = 'google_calendar_credentials' in session
 
             if not is_available:
-                error_msg = "Calendar service configuration error - Please check credentials"
-                logger.error(error_msg)
+                error_msg = calendar_service.get_configuration_error()
+                logger.error(f"Calendar status check failed: {error_msg}")
                 return jsonify({
                     "status": "error",
                     "available": False,
@@ -43,7 +43,7 @@ def register_routes(app):
 
             return jsonify({
                 "status": "success",
-                "available": is_available,
+                "available": True,
                 "authenticated": is_authenticated
             })
         except Exception as e:
