@@ -97,11 +97,17 @@ def register_routes(app):
         try:
             data = request.get_json()
             if not data:
-                return jsonify({"status": "error", "message": "No data provided"}), 400
+                return jsonify({
+                    "status": "error",
+                    "message": "No data provided"
+                }), 400
 
             message = data.get("message", "").strip()
             if not message:
-                return jsonify({"status": "error", "message": "Message cannot be empty"}), 400
+                return jsonify({
+                    "status": "error",
+                    "message": "Message cannot be empty"
+                }), 400
 
             user_id = str(current_user.id)
 
@@ -112,10 +118,17 @@ def register_routes(app):
                 if user_prefs:
                     prefs = user_prefs
             except Exception as e:
-                logging.warning(f"Could not fetch preferences for {user_id}: {e}")
+                logger.warning(f"Could not fetch preferences for {user_id}: {e}")
 
             try:
                 plan_result = generate_travel_plan(message, prefs)
+                if not isinstance(plan_result, dict):
+                    raise ValueError("Invalid response format from travel plan generator")
+
+                # Verify the response format
+                if "status" not in plan_result or "alternatives" not in plan_result:
+                    raise ValueError("Missing required fields in travel plan response")
+
                 return jsonify(plan_result)
             except Exception as e:
                 logger.error(f"Error generating travel plan: {e}", exc_info=True)

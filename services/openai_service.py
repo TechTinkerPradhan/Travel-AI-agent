@@ -105,7 +105,6 @@ def generate_travel_plan(message, user_preferences):
             f"{key}: {value}" for key, value in user_preferences.items()
             if value
         ])
-        logger.debug(f"User preferences context: {preferences_context}")
 
         system_prompt = """You are a travel planning assistant. You will provide TWO different travel plans.
         Each plan should be well-formatted with:
@@ -172,6 +171,8 @@ def generate_travel_plan(message, user_preferences):
             ]
         }
 
+        # Verify JSON serialization before returning
+        json.dumps(formatted_response)  # This will raise an error if not JSON serializable
         return formatted_response
 
     except Exception as e:
