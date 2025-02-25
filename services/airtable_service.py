@@ -24,46 +24,115 @@ class AirtableService:
         # Clean up base ID - remove any trailing paths or slashes
         self.base_id = self.base_id.split('/')[0].strip()
 
-        # Define table names
+        # Define table names and required fields
         self.USER_PREFERENCES = "User Preferences"
         self.ITINERARIES = "Travel Itineraries"
 
-        # Try to initialize and test the connection
-        self._test_connection()
+        self.REQUIRED_PREFERENCE_FIELDS = [
+            'User ID',
+            'Budget Preference',
+            'Travel Style',
+            'Last Updated Date'
+        ]
 
-    def _test_connection(self):
-        """Test connection to Airtable and print table information"""
+        self.REQUIRED_ITINERARY_FIELDS = [
+            'User ID',
+            'Original Query',
+            'Content',
+            'Destination',
+            'Start Date',
+            'End Date',
+            'Status'
+        ]
+
+        # Initialize and verify tables
+        self._initialize_tables()
+
+    def _initialize_tables(self):
+        """Initialize and verify tables and their required fields"""
         try:
             logging.info(f"Attempting to connect to tables in base {self.base_id}")
             self.preferences_table = Table(self.access_token, self.base_id, self.USER_PREFERENCES)
             self.itineraries_table = Table(self.access_token, self.base_id, self.ITINERARIES)
 
-            # Test Preferences table
+            # Verify and update preferences table fields
             try:
-                records = self.preferences_table.all(max_records=1)
-                if records:
-                    field_names = list(records[0]['fields'].keys())
-                    logging.info(f"Fields in {self.USER_PREFERENCES}: {field_names}")
+                prefs_records = self.preferences_table.all(max_records=1)
+                if prefs_records:
+                    existing_pref_fields = list(prefs_records[0]['fields'].keys())
+                    logging.info(f"Fields in {self.USER_PREFERENCES}: {existing_pref_fields}")
+                    # Note: We can't create fields via API, log missing fields
+                    missing_pref_fields = set(self.REQUIRED_PREFERENCE_FIELDS) - set(existing_pref_fields)
+                    if missing_pref_fields:
+                        logging.warning(f"Missing fields in {self.USER_PREFERENCES}: {missing_pref_fields}")
             except Exception as e:
                 logging.warning(f"Could not read from {self.USER_PREFERENCES} table: {str(e)}")
 
-            # Test Itineraries table
+            # Verify and update itineraries table fields
             try:
                 itn_records = self.itineraries_table.all(max_records=1)
                 if itn_records:
-                    field_names = list(itn_records[0]['fields'].keys())
-                    logging.info(f"Fields in {self.ITINERARIES}: {field_names}")
+                    existing_itn_fields = list(itn_records[0]['fields'].keys())
+                    logging.info(f"Fields in {self.ITINERARIES}: {existing_itn_fields}")
+                    # Note: We can't create fields via API, log missing fields
+                    missing_itn_fields = set(self.REQUIRED_ITINERARY_FIELDS) - set(existing_itn_fields)
+                    if missing_itn_fields:
+                        logging.warning(f"Missing fields in {self.ITINERARIES}: {missing_itn_fields}")
             except Exception as e:
                 logging.error(f"Could not read from {self.ITINERARIES} table: {str(e)}")
                 raise ValueError(
-                    f"Please ensure '{self.ITINERARIES}' table exists with columns: "
-                    "'User ID', 'Original Query', 'Content', 'Destination', "
-                    "'Start Date', 'End Date', 'Status'"
+                    f"Please ensure '{self.ITINERARIES}' table exists with fields: {', '.join(self.REQUIRED_ITINERARY_FIELDS)}"
                 )
 
         except Exception as e:
             logging.error(f"Airtable connection error: {str(e)}")
             raise ValueError(f"Failed to connect to Airtable: {str(e)}")
+
+    def _verify_itinerary_fields(self, fields: Dict) -> Dict:
+        """Verify and clean fields before saving to itinerary table"""
+        verified_fields = {}
+        for field in self.REQUIRED_ITINERARY_FIELDS:
+            if field in fields:
+                verified_fields[field] = fields[field]
+        return verified_fields
+
+    def save_user_itinerary(self, user_id: str, original_query: str, selected_itinerary: str, start_date: str) -> Dict:
+        """Save the user's selected itinerary with all necessary information"""
+        try:
+            # Extract destination from the query
+            destination = self.extract_destination_from_query(original_query)
+
+            # Calculate end date based on the itinerary content
+            end_date = self.calculate_end_date(selected_itinerary, start_date)
+
+            # Create basic fields that should exist in any table
+            itinerary_fields = {
+                'User ID': user_id,
+                'Destination': destination,
+                'Start Date': start_date,
+                'End Date': end_date,
+                'Status': 'Active'
+            }
+
+            # Try to add additional fields if they exist
+            try:
+                # Test if we can add these fields by checking if they exist
+                test_record = self.itineraries_table.all(max_records=1)
+                if test_record and 'Original Query' in test_record[0]['fields']:
+                    itinerary_fields['Original Query'] = original_query
+                if test_record and 'Content' in test_record[0]['fields']:
+                    itinerary_fields['Content'] = selected_itinerary
+            except Exception as field_error:
+                logging.warning(f"Some fields could not be added: {str(field_error)}")
+
+            new_record = self.itineraries_table.create(itinerary_fields)
+            logging.debug(f"Created itinerary record with ID {new_record['id']}")
+
+            return new_record
+
+        except Exception as e:
+            logging.error(f"Error saving user itinerary: {str(e)}")
+            raise ValueError(f"Failed to save itinerary: {str(e)}")
 
     def get_user_itinerary(self, user_id: str, plan_id: str) -> Optional[Dict]:
         """Retrieve a specific itinerary by ID for a user"""
@@ -100,55 +169,20 @@ class AirtableService:
             logging.error(f"Error retrieving itineraries: {str(e)}")
             raise ValueError(f"Failed to retrieve itineraries: {str(e)}")
 
-    def save_user_itinerary(self, user_id: str, original_query: str, selected_itinerary: str, start_date: str) -> Dict:
-        """Save the user's selected itinerary with all necessary information"""
-        try:
-            # Extract destination from the query
-            destination = self.extract_destination_from_query(original_query)
-
-            # Calculate end date based on the itinerary content
-            end_date = self.calculate_end_date(selected_itinerary, start_date)
-
-            # Create the itinerary record
-            itinerary_fields = {
-                'User ID': user_id,
-                'Original Query': original_query,
-                'Content': selected_itinerary,
-                'Destination': destination,
-                'Start Date': start_date,
-                'End Date': end_date,
-                'Status': 'Active'
-            }
-
-            new_record = self.itineraries_table.create(itinerary_fields)
-            logging.debug(f"Created itinerary record with ID {new_record['id']}")
-
-            return new_record
-
-        except Exception as e:
-            logging.error(f"Error saving user itinerary: {str(e)}")
-            raise ValueError(f"Failed to save itinerary: {str(e)}")
-
     def calculate_end_date(self, itinerary_content: str, start_date: str) -> str:
         """Calculate the end date based on the itinerary content"""
         try:
-            # Convert start_date to datetime
             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-
-            # Find the highest day number in the itinerary
             day_pattern = r'Day\s+(\d+)'
             days = re.findall(day_pattern, itinerary_content, re.IGNORECASE)
             if days:
                 num_days = max(map(int, days))
-                end_dt = start_dt + timedelta(days=num_days - 1)  # -1 because Day 1 is the start date
+                end_dt = start_dt + timedelta(days=num_days - 1)
             else:
-                # Default to 7 days if no day numbers found
                 end_dt = start_dt + timedelta(days=6)
-
             return end_dt.strftime('%Y-%m-%d')
         except Exception as e:
             logging.error(f"Error calculating end date: {str(e)}")
-            # Fallback to 7 days from start
             return (datetime.strptime(start_date, '%Y-%m-%d') + timedelta(days=6)).strftime('%Y-%m-%d')
 
     def extract_destination_from_query(self, query: str) -> str:
@@ -194,12 +228,12 @@ class AirtableService:
             formula = f"{{User ID}} = '{user_id}'"
             existing_records = self.preferences_table.all(formula=formula)
 
-            fields = {
+            fields = self._verify_itinerary_fields({
                 'User ID': user_id,
                 'Budget Preference': preferences.get('budget'),
                 'Travel Style': preferences.get('travel_style'),
                 'Last Updated Date': datetime.now().strftime('%Y-%m-%d')
-            }
+            })
 
             if existing_records:
                 record_id = existing_records[0]['id']

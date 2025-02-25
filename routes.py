@@ -142,36 +142,35 @@ def register_routes(app):
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
-            required_fields = ['plan_id', 'content', 'start_date', 'original_query']
-            missing_fields = [field for field in required_fields if field not in data]
-            if missing_fields:
-                logger.error(f"Missing required fields: {missing_fields}")
+            # Validate required fields
+            if not all(key in data for key in ['start_date', 'content', 'original_query']):
                 return jsonify({
                     "status": "error",
-                    "message": f"Missing required fields: {', '.join(missing_fields)}"
+                    "message": "Missing required data. Please provide start_date, content, and original_query."
                 }), 400
 
-            # Log received data for debugging
-            logger.debug(f"Plan selection data: {data}")
-
             try:
-                # Save to Airtable
+                # Save to Airtable with basic required fields
                 saved_plan = airtable_service.save_user_itinerary(
                     user_id=str(current_user.id),
                     original_query=data['original_query'],
                     selected_itinerary=data['content'],
                     start_date=data['start_date']
                 )
+
                 logger.debug(f"Successfully saved plan: {saved_plan['id']}")
                 return jsonify({
                     "status": "success",
                     "plan_id": saved_plan['id']
                 })
+
             except Exception as e:
                 logger.error(f"Airtable save error: {str(e)}")
+                # Return a more user-friendly error message
+                error_msg = "Unable to save your travel plan. Please try again or contact support if the issue persists."
                 return jsonify({
                     "status": "error",
-                    "message": f"Failed to save plan: {str(e)}"
+                    "message": error_msg
                 }), 500
 
         except Exception as e:
