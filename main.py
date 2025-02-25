@@ -1,6 +1,6 @@
 import logging
-import os
-from flask import Flask, jsonify, request
+from app import create_app
+from flask import jsonify, request
 from routes import register_routes
 
 # Set up logging
@@ -8,8 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Create and configure the app
-app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET") #Added back in from original
+app = create_app()
 register_routes(app)
 
 # Register error handlers

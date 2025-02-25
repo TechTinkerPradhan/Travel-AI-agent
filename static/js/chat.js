@@ -2,50 +2,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatForm = document.getElementById('chatForm');
     const messageInput = document.getElementById('messageInput');
     const chatMessages = document.getElementById('chatMessages');
+    const preferencesForm = document.getElementById('preferencesForm');
     const submitButton = chatForm.querySelector('button[type="submit"]');
 
     // Generate a simple user ID for demo purposes
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
-    function showLoading() {
-        const loadingDiv = document.createElement('div');
-        loadingDiv.className = 'message system loading-message';
-        loadingDiv.innerHTML = '<div class="loading"></div>';
-        chatMessages.appendChild(loadingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        return loadingDiv;
-    }
-
-    function formatPlanContent(content) {
-        // Replace markdown headers with styled divs
-        let formatted = content.replace(/## Day (\d+): ([^\n]+)/g, 
-            '<div class="day-header mb-3 mt-4"><h5 class="text-primary">Day $1: $2</h5></div>');
-
-        // Format time entries (e.g., "09:00 Visit place")
-        formatted = formatted.replace(/(\d{1,2}:\d{2}) ([^\n]+)/g, 
-            '<div class="time-entry mb-2"><span class="time">$1</span> $2</div>');
-
-        // Format locations (text between ** **)
-        formatted = formatted.replace(/\*\*([^*]+)\*\*/g, 
-            '<span class="location"><i data-feather="map-pin"></i> $1</span>');
-
-        // Format durations (text in parentheses)
-        formatted = formatted.replace(/\(([^)]+)\)/g, 
-            '<span class="duration"><i data-feather="clock"></i> $1</span>');
-
-        // Convert bullet points to styled list items
-        formatted = formatted.replace(/- ([^\n]+)/g, 
-            '<div class="activity-item"><i data-feather="chevron-right"></i> $1</div>');
-
-        return formatted;
-    }
-
+    // -------------
+    // MAIN HELPERS
+    // -------------
     function addMessage(content, isUser = false, isError = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isUser ? 'user' : 'system'} ${isError ? 'error' : ''}`;
 
         if (typeof content === 'string') {
-            // For regular messages, just set the text
             messageDiv.textContent = content;
         } else if (content.alternatives) {
             // The AI returned multiple itinerary alternatives
@@ -65,25 +35,34 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
+    function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message system loading-message';
+        loadingDiv.innerHTML = '<div class="loading"></div>';
+        chatMessages.appendChild(loadingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        return loadingDiv;
+    }
+
+    // ---------------
+    // SELECT OPTIONS
+    // ---------------
     function createResponseOption(optionData) {
         console.log('Creating response option:', optionData);
         const optionDiv = document.createElement('div');
         optionDiv.className = 'message system response-option';
 
-        // Format the content with proper styling
+        // Safely parse Markdown
         try {
-            const formattedContent = formatPlanContent(optionData.content);
-            optionDiv.innerHTML = formattedContent;
-            // Initialize Feather icons
-            feather.replace();
+            optionDiv.innerHTML = marked.parse(optionData.content);
         } catch (e) {
-            console.error('Error formatting plan:', e);
+            console.error('Error parsing markdown:', e);
             optionDiv.textContent = optionData.content;
         }
 
-        // Add selection button
+        // "Select This Option" button
         const selectButton = document.createElement('button');
-        selectButton.className = 'btn btn-sm btn-outline-primary mt-3 select-response-btn';
+        selectButton.className = 'btn btn-sm btn-outline-primary mt-2 select-response-btn';
         selectButton.innerHTML = '<i data-feather="check"></i> Select this option';
         optionDiv.appendChild(selectButton);
 
@@ -99,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectButton.innerHTML = '<i data-feather="check"></i> Selected';
             feather.replace();
 
-            // Show refine or confirm buttons
+            // Show refine or confirm
             showRefineOrConfirmButtons(optionData.content, optionDiv);
         });
 
@@ -165,29 +144,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     user_id: userId
                 })
             });
-
-            // Check if response is ok and content-type is json
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status}`);
-            }
-
-            const contentType = response.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) {
-                throw new Error("Server returned non-JSON response");
-            }
-
             const data = await response.json();
             loadingMsg.remove();
 
             if (data.status === 'success') {
-                addMessage(data);
+                addMessage(data); // This shows the new itinerary options again
             } else {
                 addMessage('Error refining plan: ' + data.message, false, true);
             }
         } catch (error) {
             loadingMsg.remove();
             addMessage('Error refining plan: ' + error.message, false, true);
-            console.error('Refinement error:', error);
         }
     }
 
@@ -426,17 +393,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: userMessage, user_id: userId })
             });
-
-            // Check if response is ok and content-type is json
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status}`);
-            }
-
-            const contentType = response.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) {
-                throw new Error("Server returned non-JSON response");
-            }
-
             const data = await response.json();
             loadingMessage.remove();
 
@@ -447,8 +403,31 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (err) {
             loadingMessage.remove();
-            console.error('Chat error:', err);
             addMessage('Error: ' + err.message, false, true);
+        }
+    });
+
+    preferencesForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const preferences = {
+            budget: document.getElementById('budget').value,
+            travelStyle: document.getElementById('travelStyle').value
+        };
+
+        try {
+            const response = await fetch('/api/preferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, preferences })
+            });
+            const data = await response.json();
+            if (data.status === 'success') {
+                addMessage('Preferences updated successfully! How can I help you plan your trip?');
+            } else {
+                addMessage('Error saving preferences: ' + data.message, false, true);
+            }
+        } catch (err) {
+            addMessage('Error connecting to server: ' + err.message, false, true);
         }
     });
 
