@@ -28,9 +28,6 @@ class CalendarService:
                 raise ValueError("Google Calendar credentials not found in session")
 
             credentials = session['google_calendar_credentials']
-            logger.debug("Retrieved credentials from session")
-
-            # Initialize Google Calendar API
             creds = Credentials.from_authorized_user_info(credentials, self.SCOPES)
             service = build('calendar', 'v3', credentials=creds)
             logger.debug("Successfully initialized Calendar API service")
@@ -45,13 +42,16 @@ class CalendarService:
 
             for day_content in days[1:]:  # Skip first empty split
                 try:
-                    # Extract day number
-                    day_num = int(day_content.split(':')[0].strip())
+                    # Extract day number and title
+                    day_header = day_content.split('\n')[0]
+                    day_num = int(day_header.split(':')[0].strip())
                     current_date = start_dt + timedelta(days=day_num - 1)
+
                     logger.debug(f"Processing Day {day_num}")
 
                     # Find all time-based activities
-                    activities = re.findall(r'-\s*(\d{1,2}:\d{2}):\s*(.+?)(?=(?:-\s*\d{1,2}:\d{2}:|$))', day_content, re.DOTALL)
+                    # Match pattern: "- HH:MM: Description"
+                    activities = re.findall(r'-\s*(\d{1,2}:\d{2}):\s*(.+?)(?=(?:\n-\s*\d{1,2}:\d{2}:|\Z))', day_content, re.DOTALL)
                     logger.debug(f"Found {len(activities)} activities for Day {day_num}")
 
                     for time_str, activity_desc in activities:
@@ -84,13 +84,16 @@ class CalendarService:
                                 location = loc_match.group(1)
                                 activity_desc = activity_desc.replace(f"**{location}**", "")
 
+                            # Clean up description and format title
                             activity_desc = activity_desc.strip()
-                            logger.debug(f"Creating event: {activity_desc} at {event_time}")
+                            event_title = f"Day {day_num}: {time_str}: {activity_desc}"
+
+                            logger.debug(f"Creating event: {event_title}")
 
                             event = {
-                                'summary': f"Day {day_num}: {activity_desc}",
+                                'summary': event_title,
                                 'location': location,
-                                'description': f"Travel Itinerary - Day {day_num}\n{activity_desc}",
+                                'description': f"Part of your Day {day_num} itinerary",
                                 'start': {
                                     'dateTime': event_time.isoformat(),
                                     'timeZone': 'UTC'
@@ -106,7 +109,8 @@ class CalendarService:
                                         {'method': 'email', 'minutes': 24 * 60},
                                         {'method': 'popup', 'minutes': 30}
                                     ]
-                                }
+                                },
+                                'transparency': 'transparent'  # Shows as 'free' in calendar
                             }
 
                             try:
