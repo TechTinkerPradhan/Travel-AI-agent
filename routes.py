@@ -16,6 +16,18 @@ def register_routes(app):
     airtable_service = AirtableService()
     calendar_service = CalendarService()
 
+    @app.errorhandler(404)
+    def not_found(e):
+        """Return JSON for HTTP 404 errors."""
+        logger.error(f"404 error: {request.url}")
+        return jsonify({"status": "error", "message": "Resource not found"}), 404
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        """Return JSON instead of HTML for any error."""
+        logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
     @app.route("/")
     def index():
         """Redirect to login if not authenticated, otherwise show main page"""
@@ -83,11 +95,14 @@ def register_routes(app):
     def chat():
         """Handle user chat message to generate itinerary plan or refine it."""
         try:
-            data = request.json
+            data = request.get_json()
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
             message = data.get("message", "").strip()
+            if not message:
+                return jsonify({"status": "error", "message": "Message cannot be empty"}), 400
+
             user_id = str(current_user.id)
 
             # Retrieve user preferences from Airtable if they exist
@@ -99,19 +114,32 @@ def register_routes(app):
             except Exception as e:
                 logging.warning(f"Could not fetch preferences for {user_id}: {e}")
 
-            plan_result = generate_travel_plan(message, prefs)
-            return jsonify(plan_result)
+            try:
+                plan_result = generate_travel_plan(message, prefs)
+                return jsonify(plan_result)
+            except Exception as e:
+                logger.error(f"Error generating travel plan: {e}", exc_info=True)
+                error_msg = str(e)
+                if '<html>' in error_msg:
+                    error_msg = "Server encountered an unexpected error. Please try again."
+                return jsonify({
+                    "status": "error",
+                    "message": error_msg
+                }), 500
 
         except Exception as e:
             logger.error(f"Error in chat endpoint: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            return jsonify({
+                "status": "error",
+                "message": "An unexpected error occurred. Please try again."
+            }), 500
 
     @app.route("/api/chat/select", methods=["POST"])
     @login_required
     def select_response():
         """Save selected itinerary."""
         try:
-            data = request.json
+            data = request.get_json()
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
 
@@ -138,7 +166,7 @@ def register_routes(app):
     def update_preferences():
         """Save user preferences in Airtable."""
         try:
-            data = request.json
+            data = request.get_json()
             user_id = str(current_user.id)
             prefs = data.get("preferences", {})
 
