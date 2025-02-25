@@ -191,6 +191,12 @@ def register_routes(app):
                     "message": "Calendar service is not available"
                 }), 503
 
+            if 'google_calendar_credentials' not in session:
+                return jsonify({
+                    "status": "error",
+                    "message": "Please connect your Google Calendar first"
+                }), 401
+
             data = request.get_json()
             if not data or 'plan_id' not in data or 'start_date' not in data:
                 return jsonify({
@@ -199,33 +205,45 @@ def register_routes(app):
                 }), 400
 
             # Get the plan from Airtable
-            plan = airtable_service.get_user_itinerary(
-                user_id=str(current_user.id),
-                plan_id=data['plan_id']
-            )
+            try:
+                plan = airtable_service.get_user_itinerary(
+                    user_id=str(current_user.id),
+                    plan_id=data['plan_id']
+                )
 
-            if not plan:
+                if not plan:
+                    logger.error(f"Plan not found for ID: {data['plan_id']}")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Plan not found"
+                    }), 404
+
+                # Create calendar events
+                events = calendar_service.create_events_from_plan(
+                    itinerary_content=plan['content'],
+                    start_date=data['start_date'],
+                    user_email=current_user.email
+                )
+
+                return jsonify({
+                    "status": "success",
+                    "message": "Successfully added to calendar",
+                    "events": events
+                })
+
+            except Exception as e:
+                logger.error(f"Error retrieving plan or creating events: {str(e)}")
                 return jsonify({
                     "status": "error",
-                    "message": "Plan not found"
-                }), 404
-
-            # Create calendar events
-            events = calendar_service.create_events_from_plan(
-                plan['content'],
-                start_date=data['start_date'],
-                user_email=current_user.email
-            )
-
-            return jsonify({
-                "status": "success",
-                "message": "Successfully added to calendar",
-                "events": events
-            })
+                    "message": "Failed to create calendar events. Please try again."
+                }), 500
 
         except Exception as e:
             logger.error(f"Error adding to calendar: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            return jsonify({
+                "status": "error",
+                "message": "An unexpected error occurred. Please try again."
+            }), 500
 
     @app.route("/api/plans", methods=["GET"])
     @login_required
