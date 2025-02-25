@@ -119,6 +119,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>  <!-- Add marked.js -->
     <script>
         feather.replace();
         // Configure marked to sanitize HTML
@@ -178,5 +179,104 @@
             checkCalendarStatus();
         });
     </script>
+    <script>
+        feather.replace();
+        // Configure marked to sanitize HTML
+        marked.setOptions({
+            sanitize: true,
+            breaks: true
+        });
+
+        async function handleChatSubmission(message) {
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                // Check if response is ok
+                if (!response.ok) {
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.includes("application/json")) {
+                        // Parse JSON error
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'An error occurred while processing your request');
+                    } else {
+                        // Handle non-JSON response
+                        const text = await response.text();
+                        throw new Error('Server error. Please try again later.');
+                    }
+                }
+
+                // Parse JSON response
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Chat submission error:', error);
+                throw new Error(error.message || 'Failed to process your request. Please try again.');
+            }
+        }
+
+        // Initialize chat functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatForm = document.getElementById('chatForm');
+            const messageInput = document.getElementById('messageInput');
+            const chatMessages = document.getElementById('chatMessages');
+
+            chatForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const message = messageInput.value.trim();
+                if (!message) return;
+
+                // Clear input
+                messageInput.value = '';
+
+                // Add user message to chat
+                const userMessageDiv = document.createElement('div');
+                userMessageDiv.className = 'message user';
+                userMessageDiv.textContent = message;
+                chatMessages.appendChild(userMessageDiv);
+
+                try {
+                    const response = await handleChatSubmission(message);
+
+                    if (response.status === 'success' && response.alternatives) {
+                        // Display each alternative plan
+                        response.alternatives.forEach((alt, index) => {
+                            const planDiv = document.createElement('div');
+                            planDiv.className = 'message system';
+                            planDiv.innerHTML = marked.parse(alt.content);
+                            chatMessages.appendChild(planDiv);
+                        });
+                    } else {
+                        throw new Error(response.message || 'Failed to generate travel plans');
+                    }
+                } catch (error) {
+                    // Add error message to chat
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'message error';
+                    errorDiv.textContent = `Error: ${error.message}`;
+                    chatMessages.appendChild(errorDiv);
+                }
+
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        });
+    </script>
+
+    <style>
+        .message.error {
+            background-color: #fee2e2;
+            border: 1px solid #ef4444;
+            color: #dc2626;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+    </style>
 </body>
 </html>
