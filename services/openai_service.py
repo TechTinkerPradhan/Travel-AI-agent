@@ -1,8 +1,6 @@
 import os
 import time
-import random
 import logging
-import json
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError
 from services.ai_agents import AgentRegistry, AgentRole
 
@@ -16,12 +14,13 @@ if not OPENAI_API_KEY:
     logger.error("OPENAI_API_KEY is not set")
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
+logger.info(f"Initializing OpenAI client with API key starting with: {OPENAI_API_KEY[:8]}...")
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
 
 def generate_travel_plan(message, user_preferences):
     """
-    Generate multiple travel recommendations using OpenAI's API
+    Generate travel recommendations using OpenAI's API with enhanced error handling
     """
     try:
         logger.debug("Starting travel plan generation")
@@ -62,6 +61,9 @@ def generate_travel_plan(message, user_preferences):
         """
 
         logger.debug("Making OpenAI API call")
+        logger.debug("System prompt length: %d", len(system_prompt))
+        logger.debug("Full prompt length: %d", len(full_prompt))
+
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -72,8 +74,11 @@ def generate_travel_plan(message, user_preferences):
             temperature=0.7
         )
 
+        logger.debug("Received OpenAI response")
+        logger.debug(f"Response status: {response.model_dump()}")
+
         content = response.choices[0].message.content
-        logger.debug(f"Received response (length: {len(content)})")
+        logger.debug(f"Generated content length: {len(content)}")
 
         # Split into two plans
         plans = content.split('---')
@@ -96,10 +101,23 @@ def generate_travel_plan(message, user_preferences):
             ]
         }
 
+        logger.debug("Successfully formatted response")
         return formatted_response
 
+    except RateLimitError as e:
+        logger.error(f"OpenAI Rate limit error: {str(e)}")
+        raise Exception("Rate limit reached. Please try again in a few moments.")
+
+    except APIError as e:
+        logger.error(f"OpenAI API error: {str(e)}")
+        raise Exception(f"API Error: {str(e)}")
+
+    except APIConnectionError as e:
+        logger.error(f"OpenAI Connection error: {str(e)}")
+        raise Exception("Could not connect to OpenAI. Please check your internet connection.")
+
     except Exception as e:
-        logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in generate_travel_plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
 
 def analyze_user_preferences(query: str, selected_response: str):
