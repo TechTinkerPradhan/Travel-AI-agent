@@ -62,8 +62,7 @@
             </div>
         </div>
 
-        <!-- Your Travel Plans Section -->
-        <div class="card mb-4" id="yourPlansSection" style="display: none;">
+        <div class="card mb-4" id="yourPlansSection">
             <div class="card-body">
                 <h5 class="card-title">Your Travel Plans</h5>
                 <div id="plansList" class="list-group">
@@ -237,6 +236,46 @@
             dateModal.show();
         }
 
+        // Function to load user's travel plans
+        async function loadUserPlans() {
+            try {
+                const response = await fetch('/api/plans');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch plans');
+                }
+
+                const data = await response.json();
+                if (data.status === 'success' && data.plans) {
+                    const plansContainer = document.getElementById('plansList');
+                    plansContainer.innerHTML = '';
+
+                    data.plans.forEach(plan => {
+                        const planElement = document.createElement('div');
+                        planElement.className = 'list-group-item';
+                        planElement.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">${plan.destination}</h6>
+                                    <p class="mb-1 text-muted">
+                                        ${new Date(plan.start_date).toLocaleDateString()} - 
+                                        ${new Date(plan.end_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <span class="badge bg-${plan.status === 'Active' ? 'success' : 'secondary'}">
+                                    ${plan.status}
+                                </span>
+                            </div>
+                        `;
+                        plansContainer.appendChild(planElement);
+                    });
+
+                    document.getElementById('yourPlansSection').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading plans:', error);
+            }
+        }
+
         document.getElementById('confirmDate').addEventListener('click', async () => {
             const startDate = document.getElementById('startDate').value;
             if (!startDate) {
@@ -268,6 +307,9 @@
                     throw new Error('Failed to save plan');
                 }
 
+                // After successful save, reload the plans list
+                await loadUserPlans();
+
                 const dateModal = bootstrap.Modal.getInstance(document.getElementById('dateModal'));
                 dateModal.hide();
 
@@ -279,7 +321,6 @@
                 calendarBtn.addEventListener('click', () => addToCalendar(startDate));
                 selectedPlanDiv.appendChild(calendarBtn);
                 feather.replace();
-
             } catch (error) {
                 console.error('Error saving plan:', error);
                 alert('Failed to save plan. Please try again.');
@@ -366,6 +407,7 @@
 
             // Initialize calendar status check
             checkCalendarStatus();
+            loadUserPlans(); // Call loadUserPlans on page load
         });
 
         // Calendar functionality
@@ -449,6 +491,21 @@
         .plan-actions {
             border-top: 1px solid #4a5568;
             padding-top: 1rem;
+        }
+        #yourPlansSection {
+            background-color: #1a202c;
+        }
+        #plansList .list-group-item {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            color: #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        #plansList .list-group-item:hover {
+            background-color: #374151;
+        }
+        .text-muted {
+            color: #a0aec0 !important;
         }
     </style>
 </body>
