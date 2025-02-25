@@ -303,8 +303,10 @@
                     })
                 });
 
+                const data = await response.json();
+
                 if (!response.ok) {
-                    throw new Error('Failed to save plan');
+                    throw new Error(data.message || 'Failed to save plan');
                 }
 
                 // After successful save, reload the plans list
@@ -318,16 +320,17 @@
                 const calendarBtn = document.createElement('button');
                 calendarBtn.className = 'btn btn-success mt-3';
                 calendarBtn.innerHTML = '<i data-feather="calendar"></i> Add to Google Calendar';
-                calendarBtn.addEventListener('click', () => addToCalendar(startDate));
+                calendarBtn.addEventListener('click', () => addToCalendar(selectedPlanId, startDate));
                 selectedPlanDiv.appendChild(calendarBtn);
                 feather.replace();
+
             } catch (error) {
                 console.error('Error saving plan:', error);
-                alert('Failed to save plan. Please try again.');
+                alert(error.message || 'Failed to save plan. Please try again.');
             }
         });
 
-        async function addToCalendar(startDate) {
+        async function addToCalendar(planId, startDate) {
             try {
                 const response = await fetch('/api/calendar/add', {
                     method: 'POST',
@@ -335,19 +338,21 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        plan_id: selectedPlanId,
+                        plan_id: planId,
                         start_date: startDate
                     })
                 });
 
+                const data = await response.json();
+
                 if (!response.ok) {
-                    throw new Error('Failed to add to calendar');
+                    throw new Error(data.message || 'Failed to add to calendar');
                 }
 
                 alert('Successfully added to your Google Calendar!');
             } catch (error) {
                 console.error('Error adding to calendar:', error);
-                alert('Failed to add to calendar. Please try again.');
+                alert(error.message || 'Failed to add to calendar. Please try again.');
             }
         }
 

@@ -137,6 +137,7 @@ def register_routes(app):
     def select_plan():
         """Handle plan selection and save to database."""
         try:
+            logger.debug("Received plan selection request")
             data = request.get_json()
             if not data:
                 return jsonify({"status": "error", "message": "No data provided"}), 400
@@ -144,23 +145,41 @@ def register_routes(app):
             required_fields = ['plan_id', 'content', 'start_date', 'original_query']
             missing_fields = [field for field in required_fields if field not in data]
             if missing_fields:
+                logger.error(f"Missing required fields: {missing_fields}")
                 return jsonify({
                     "status": "error",
                     "message": f"Missing required fields: {', '.join(missing_fields)}"
                 }), 400
 
-            # Save to Airtable
-            airtable_service.save_user_itinerary(
-                user_id=str(current_user.id),
-                original_query=data['original_query'],
-                selected_itinerary=data['content'],
-                start_date=data['start_date']
-            )
+            # Log received data for debugging
+            logger.debug(f"Plan selection data: {data}")
 
-            return jsonify({"status": "success"})
+            try:
+                # Save to Airtable
+                saved_plan = airtable_service.save_user_itinerary(
+                    user_id=str(current_user.id),
+                    original_query=data['original_query'],
+                    selected_itinerary=data['content'],
+                    start_date=data['start_date']
+                )
+                logger.debug(f"Successfully saved plan: {saved_plan['id']}")
+                return jsonify({
+                    "status": "success",
+                    "plan_id": saved_plan['id']
+                })
+            except Exception as e:
+                logger.error(f"Airtable save error: {str(e)}")
+                return jsonify({
+                    "status": "error",
+                    "message": f"Failed to save plan: {str(e)}"
+                }), 500
+
         except Exception as e:
-            logger.error(f"Error in select_plan: {e}", exc_info=True)
-            return jsonify({"status": "error", "message": str(e)}), 500
+            logger.error(f"Error in select_plan: {str(e)}", exc_info=True)
+            return jsonify({
+                "status": "error",
+                "message": "An unexpected error occurred while saving the plan"
+            }), 500
 
     @app.route("/api/calendar/add", methods=["POST"])
     @login_required
