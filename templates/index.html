@@ -332,6 +332,12 @@
 
         async function addToCalendar(planId, startDate) {
             try {
+                // Find the selected plan's content
+                const selectedPlan = currentPlanData.alternatives.find(p => p.id === planId);
+                if (!selectedPlan) {
+                    throw new Error('Selected plan not found');
+                }
+
                 const response = await fetch('/api/calendar/add', {
                     method: 'POST',
                     headers: {
@@ -339,6 +345,7 @@
                     },
                     body: JSON.stringify({
                         plan_id: planId,
+                        content: selectedPlan.content,
                         start_date: startDate
                     })
                 });

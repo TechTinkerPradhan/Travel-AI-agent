@@ -198,29 +198,16 @@ def register_routes(app):
                 }), 401
 
             data = request.get_json()
-            if not data or 'plan_id' not in data or 'start_date' not in data:
+            if not data or 'content' not in data or 'start_date' not in data:
                 return jsonify({
                     "status": "error",
                     "message": "Missing required data"
                 }), 400
 
-            # Get the plan from Airtable
             try:
-                plan = airtable_service.get_user_itinerary(
-                    user_id=str(current_user.id),
-                    plan_id=data['plan_id']
-                )
-
-                if not plan:
-                    logger.error(f"Plan not found for ID: {data['plan_id']}")
-                    return jsonify({
-                        "status": "error",
-                        "message": "Plan not found"
-                    }), 404
-
-                # Create calendar events
+                # Create calendar events directly from the provided content
                 events = calendar_service.create_events_from_plan(
-                    itinerary_content=plan['content'],
+                    itinerary_content=data['content'],
                     start_date=data['start_date'],
                     user_email=current_user.email
                 )
@@ -232,7 +219,7 @@ def register_routes(app):
                 })
 
             except Exception as e:
-                logger.error(f"Error retrieving plan or creating events: {str(e)}")
+                logger.error(f"Error creating calendar events: {str(e)}")
                 return jsonify({
                     "status": "error",
                     "message": "Failed to create calendar events. Please try again."
