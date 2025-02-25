@@ -17,8 +17,47 @@
                     <i data-feather="compass" class="me-2"></i>
                     AI Travel Assistant
                 </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="{{ url_for('index') }}">
+                                <i data-feather="message-square"></i> Chat
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </nav>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title d-flex align-items-center">
+                    <i data-feather="calendar" class="me-2"></i>
+                    Calendar Integration
+                </h5>
+                <div id="calendarStatus">
+                    <p class="text-muted mb-3">Connect your Google Calendar to save travel itineraries</p>
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('calendar_auth') }}" class="btn btn-outline-primary" id="calendarAuthBtn">
+                            <i data-feather="calendar"></i>
+                            Connect Google Calendar
+                        </a>
+                        <div id="calendarErrors" class="alert alert-danger" style="display: none;">
+                            <small class="calendar-error-details"></small>
+                        </div>
+                        <div id="calendarSuccess" class="alert alert-success" style="display: none;">
+                            <small>Successfully connected to Google Calendar!</small>
+                        </div>
+                        <small class="text-muted calendar-status-msg" style="display: none;">
+                            Calendar integration is currently unavailable. Please try again later.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="card chat-container">
             <div class="card-body p-0 d-flex flex-column">
@@ -41,55 +80,67 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
     <script>
         feather.replace();
 
-        document.getElementById('chatForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value.trim();
-            if (!message) return;
-
-            // Add user message to chat
-            const chatMessages = document.getElementById('chatMessages');
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.className = 'message user';
-            userMessageDiv.textContent = message;
-            chatMessages.appendChild(userMessageDiv);
-
-            // Clear input
-            messageInput.value = '';
-
+        async function checkCalendarStatus() {
             try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ message })
-                });
-
+                console.log('Checking calendar status...');
+                const response = await fetch('/api/calendar/status');
                 const data = await response.json();
-                if (data.status === 'error') {
-                    throw new Error(data.message);
+                console.log('Calendar status response:', data);
+
+                const calendarBtn = document.getElementById('calendarAuthBtn');
+                const statusMsg = document.querySelector('.calendar-status-msg');
+                const errorDiv = document.getElementById('calendarErrors');
+                const errorDetails = document.querySelector('.calendar-error-details');
+                const successDiv = document.getElementById('calendarSuccess');
+
+                // Hide all feedback elements initially
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                statusMsg.style.display = 'none';
+
+                if (!data.available) {
+                    console.error('Calendar service unavailable:', data);
+                    calendarBtn.classList.add('disabled');
+                    calendarBtn.setAttribute('aria-disabled', 'true');
+                    statusMsg.style.display = 'block';
+                    if (data.message) {
+                        errorDiv.style.display = 'block';
+                        errorDetails.textContent = `Error: ${data.message}`;
+                    }
+                } else if (data.authenticated) {
+                    console.log('Calendar service authenticated');
+                    calendarBtn.innerHTML = '<i data-feather="check-circle"></i> Calendar Connected';
+                    calendarBtn.classList.remove('btn-outline-primary');
+                    calendarBtn.classList.add('btn-success');
+                    calendarBtn.classList.add('disabled');
+                    successDiv.style.display = 'block';
+                    feather.replace();
                 }
-
-                // Display each plan as a system message
-                data.alternatives.forEach(plan => {
-                    const planDiv = document.createElement('div');
-                    planDiv.className = 'message system';
-                    planDiv.textContent = plan.content;
-                    chatMessages.appendChild(planDiv);
-                });
-
-                // Scroll to bottom
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-
             } catch (error) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'message error';
-                errorDiv.textContent = `Error: ${error.message}`;
-                chatMessages.appendChild(errorDiv);
+                console.error('Error checking calendar status:', error);
+                const errorDiv = document.getElementById('calendarErrors');
+                const errorDetails = document.querySelector('.calendar-error-details');
+                errorDiv.style.display = 'block';
+                errorDetails.textContent = `Error checking calendar status: ${error.message}`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, checking calendar status...');
+            checkCalendarStatus();
+
+            if (window.location.search.includes('code=')) {
+                const statusCheck = setInterval(() => {
+                    checkCalendarStatus();
+                }, 5000);
+
+                setTimeout(() => {
+                    clearInterval(statusCheck);
+                }, 30000);
             }
         });
     </script>
