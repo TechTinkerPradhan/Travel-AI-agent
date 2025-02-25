@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from flask import session
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -12,25 +13,20 @@ logger = logging.getLogger(__name__)
 class CalendarService:
     def __init__(self):
         """Initialize Google Calendar OAuth configuration"""
-        # Explicitly set domain to match Google Cloud Console configuration
         self.replit_domain = "ai-travel-buddy-bboyswagat.replit.app"
 
         logger.debug("=== Calendar Service Initialization ===")
         logger.debug(f"Using domain: {self.replit_domain}")
 
-        # Get credentials with proper error handling
         try:
             self.client_id = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '').strip()
             self.client_secret = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '').strip()
 
-            # Log credential information safely (only lengths)
             logger.debug(f"Client ID length: {len(self.client_id)}")
             logger.debug(f"Client Secret length: {len(self.client_secret)}")
 
-            # Enhanced credential validation
             self.validate_credentials()
 
-            # Define all required Google OAuth scopes
             self.SCOPES = [
                 'https://www.googleapis.com/auth/calendar.events',
                 'https://www.googleapis.com/auth/userinfo.email',
@@ -79,70 +75,90 @@ class CalendarService:
             raise ValueError("Calendar service is not configured - missing credentials")
 
         try:
-            # Parse the itinerary
+            # Parse the itinerary into days and activities
             days = self.parse_itinerary(itinerary_content)
-
             if not days:
                 raise ValueError("No valid itinerary days found in content")
 
+            # Convert start_date to datetime
             start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
 
-            # Get the credentials from session -  Assuming session is available in the context.  This needs to be properly integrated.
-            # Replace this with actual session retrieval
-            # creds = Credentials.from_authorized_user_info(session.get('google_calendar_credentials'), self.SCOPES)
-            creds = Credentials.from_authorized_user_info({}, self.SCOPES) # Placeholder - replace with actual credential retrieval
+            # Get credentials from session
+            if 'google_calendar_credentials' not in session:
+                raise ValueError("Google Calendar credentials not found in session")
 
+            creds = Credentials.from_authorized_user_info(
+                session['google_calendar_credentials'],
+                self.SCOPES
+            )
 
+            # Initialize Calendar API service
             service = build('calendar', 'v3', credentials=creds)
 
             created_events = []
+
+            # Create events for each activity
             for day in days:
-                day_date = start_dt + timedelta(days=day['day_number'] - 1)
+                current_date = start_dt + timedelta(days=day['day_number'] - 1)
 
                 for activity in day['activities']:
-                    # Parse time from activity
                     try:
-                        hh, mm = map(int, activity['time'].split(':'))
-                    except (ValueError, KeyError):
-                        logger.warning(f"Invalid time format in activity: {activity}")
+                        # Parse time
+                        time_parts = activity['time'].split(':')
+                        hours = int(time_parts[0])
+                        minutes = int(time_parts[1])
+
+                        # Create event start time
+                        event_start = datetime(
+                            current_date.year,
+                            current_date.month,
+                            current_date.day,
+                            hours,
+                            minutes
+                        )
+
+                        # Calculate event end time based on duration
+                        duration_minutes = activity.get('duration', 60)  # Default 1 hour
+                        event_end = event_start + timedelta(minutes=duration_minutes)
+
+                        # Create event
+                        event = {
+                            'summary': activity['description'],
+                            'location': activity.get('location', ''),
+                            'description': f"Day {day['day_number']} of your trip\n{activity['description']}",
+                            'start': {
+                                'dateTime': event_start.isoformat(),
+                                'timeZone': 'UTC'
+                            },
+                            'end': {
+                                'dateTime': event_end.isoformat(),
+                                'timeZone': 'UTC'
+                            },
+                            'attendees': [{'email': user_email}],
+                            'reminders': {
+                                'useDefault': True
+                            }
+                        }
+
+                        # Insert event
+                        created_event = service.events().insert(
+                            calendarId='primary',
+                            body=event,
+                            sendUpdates='all'
+                        ).execute()
+
+                        created_events.append({
+                            'id': created_event['id'],
+                            'summary': created_event['summary'],
+                            'start': created_event['start']['dateTime'],
+                            'end': created_event['end']['dateTime']
+                        })
+
+                        logger.debug(f"Created event: {created_event['summary']}")
+
+                    except Exception as event_error:
+                        logger.error(f"Error creating event: {str(event_error)}")
                         continue
-
-                    event_start = datetime(
-                        day_date.year, day_date.month, day_date.day, 
-                        hh, mm
-                    )
-
-                    # Default duration is 1 hour if not specified
-                    duration = activity.get('duration', 60)
-                    event_end = event_start + timedelta(minutes=duration)
-
-                    event = {
-                        'summary': f"Day {day['day_number']}: {activity['description']}",
-                        'location': activity.get('location', ''),
-                        'description': f"Part of your travel itinerary for Day {day['day_number']}",
-                        'start': {
-                            'dateTime': event_start.isoformat(),
-                            'timeZone': 'UTC'
-                        },
-                        'end': {
-                            'dateTime': event_end.isoformat(),
-                            'timeZone': 'UTC'
-                        },
-                        'attendees': [
-                            {'email': user_email}
-                        ]
-                    }
-
-                    created_event = service.events().insert(
-                        calendarId='primary',
-                        body=event
-                    ).execute()
-
-                    created_events.append({
-                        'id': created_event['id'],
-                        'summary': created_event['summary'],
-                        'start': created_event['start']['dateTime']
-                    })
 
             return created_events
 
@@ -151,80 +167,69 @@ class CalendarService:
             raise ValueError(f"Failed to create calendar events: {str(e)}")
 
     def parse_itinerary(self, content: str) -> list:
-        """
-        Parse a markdown itinerary with lines like:
-        ## Day 1: Tokyo
-        - 09:00 Visit Shibuya (2 hours)
-        Returns structured event data.
-        """
+        """Parse a markdown itinerary into structured data"""
         try:
             days = []
             current_day = None
             current_activities = []
 
-            lines = content.split('\n')
-            day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
-            time_pattern = r'(\d{1,2}:\d{2})'
-            duration_pattern = r'\((\d+)\s*(?:hour|hours|min|minutes)\)'
-
-            for line in lines:
+            for line in content.split('\n'):
                 line = line.strip()
                 if not line:
                     continue
 
-                day_match = re.search(day_pattern, line)
+                # Match day header
+                day_match = re.search(r'##\s*Day\s*(\d+):', line)
                 if day_match:
                     if current_day and current_activities:
                         days.append({
-                            'day_number': current_day['number'],
-                            'title': current_day['title'],
+                            'day_number': current_day,
                             'activities': current_activities.copy()
                         })
-                    current_day = {
-                        'number': int(day_match.group(1)),
-                        'title': day_match.group(2).strip()
-                    }
+                    current_day = int(day_match.group(1))
                     current_activities = []
                     continue
 
+                # Match activity line
                 if current_day and line.startswith('-'):
-                    time_match = re.search(time_pattern, line)
+                    # Extract time
+                    time_match = re.search(r'(\d{1,2}:\d{2})', line)
                     if time_match:
                         time = time_match.group(1)
+
+                        # Extract activity text
                         activity_text = line[line.index('-') + 1:].strip()
 
                         # Extract location (if any)
+                        location = None
                         location_match = re.search(r'\*\*([^*]+)\*\*', activity_text)
-                        location = location_match.group(1) if location_match else None
+                        if location_match:
+                            location = location_match.group(1)
+                            activity_text = activity_text.replace(f"**{location}**", "")
 
-                        # Extract duration (if any)
-                        duration = 60  # Default duration in minutes
-                        duration_match = re.search(duration_pattern, activity_text)
+                        # Extract duration
+                        duration = 60  # Default 1 hour
+                        duration_match = re.search(r'\((\d+)\s*(?:hour|hours|min|minutes)\)', activity_text)
                         if duration_match:
                             duration_value = int(duration_match.group(1))
                             if 'hour' in duration_match.group(0).lower():
                                 duration = duration_value * 60
                             else:
                                 duration = duration_value
+                            activity_text = re.sub(r'\([^)]*\)', '', activity_text)
 
-                        # Clean up description
-                        description = activity_text
-                        if location:
-                            description = description.replace(f"**{location}**", "")
-                        description = re.sub(r'\([^)]*\)', '', description).strip()
-
-                        current_activities.append({
+                        activity = {
                             'time': time,
-                            'description': description,
+                            'description': activity_text.strip(),
                             'location': location,
                             'duration': duration
-                        })
+                        }
+                        current_activities.append(activity)
 
-            # Add the last day if exists
+            # Add the last day
             if current_day and current_activities:
                 days.append({
-                    'day_number': current_day['number'],
-                    'title': current_day['title'],
+                    'day_number': current_day,
                     'activities': current_activities
                 })
 
@@ -368,81 +373,6 @@ class CalendarService:
                 created_ids.append(created_event['id'])
 
         return created_ids
-
-    def parse_itinerary(self, content):
-        """
-        Parses a Markdown itinerary with lines like:
-          ## Day 1: Tokyo
-          - 09:00 Visit Shibuya (2 hours)
-        Returns structured event data.
-        """
-        days = []
-        current_day = None
-        current_activities = []
-
-        lines = content.split('\n')
-        day_pattern = r'##\s*Day\s*(\d+):\s*(.+)'
-        time_pattern = r'(\d{1,2}:\d{2})'
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            day_match = re.search(day_pattern, line)
-            if day_match:
-                if current_day and current_activities:
-                    days.append({
-                        'day_number': current_day['number'],
-                        'title': current_day['title'],
-                        'activities': current_activities.copy()
-                    })
-                current_day = {
-                    'number': int(day_match.group(1)),
-                    'title': day_match.group(2).strip()
-                }
-                current_activities = []
-                continue
-
-            if current_day and line.startswith('-'):
-                match_time = re.search(time_pattern, line)
-                if match_time:
-                    t = match_time.group(1)
-                    activity_text = line[line.index('-') + 1:].strip()
-                    location_match = re.search(r'\*\*([^*]+)\*\*',
-                                               activity_text)
-                    location = location_match.group(
-                        1) if location_match else None
-                    duration = 60  # Default
-                    duration_match = re.search(
-                        r'\((\d+)\s*(?:hour|hours|min|minutes)\)',
-                        activity_text, re.IGNORECASE)
-                    if duration_match:
-                        val = int(duration_match.group(1))
-                        duration = val * 60 if 'hour' in duration_match.group(
-                            0).lower() else val
-
-                    if location:
-                        activity_text = activity_text.replace(
-                            f"**{location}**", "").strip()
-                    activity_text = re.sub(r'\([^)]*\)', '',
-                                           activity_text).strip()
-
-                    current_activities.append({
-                        'time': t,
-                        'description': activity_text,
-                        'location': location,
-                        'duration': duration
-                    })
-
-        if current_day and current_activities:
-            days.append({
-                'day_number': current_day['number'],
-                'title': current_day['title'],
-                'activities': current_activities
-            })
-
-        return days
 
     def get_configuration_error(self):
         """Get detailed error message about configuration issues"""
