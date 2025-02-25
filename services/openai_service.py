@@ -16,25 +16,29 @@ if not OPENAI_API_KEY:
     logger.error("OPENAI_API_KEY is not set")
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
+# OpenAI Configuration
+DEFAULT_MODEL = "gpt-3.5-turbo"  # Can be changed to "gpt-3.5-turbo" if needed
+DEFAULT_TEMPERATURE = 0.7
+MAX_TOKENS_ITINERARY = 2000
+MAX_TOKENS_ANALYSIS = 1000
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
+
 
 def generate_travel_plan(message, user_preferences):
     """
     Generate multiple travel recommendations using OpenAI's API
     """
-    max_retries = 5
-    base_delay = 3
-
     try:
         logger.debug("Starting travel plan generation")
+        logger.debug(f"Using model: {DEFAULT_MODEL}")
         logger.debug(f"Message: {message}")
         logger.debug(f"User preferences: {user_preferences}")
 
         # Prepare context with user preferences
         preferences_context = "\n".join([
-            f"{key}: {value}" 
-            for key, value in user_preferences.items()
+            f"{key}: {value}" for key, value in user_preferences.items()
             if value
         ])
         logger.debug(f"User preferences context: {preferences_context}")
@@ -66,14 +70,16 @@ def generate_travel_plan(message, user_preferences):
 
         logger.debug("Making OpenAI API call")
         response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.7
-        )
+            model=DEFAULT_MODEL,
+            messages=[{
+                "role": "system",
+                "content": system_prompt
+            }, {
+                "role": "user",
+                "content": full_prompt
+            }],
+            max_tokens=MAX_TOKENS_ITINERARY,
+            temperature=DEFAULT_TEMPERATURE)
 
         content = response.choices[0].message.content
         logger.debug(f"Received response (length: {len(content)})")
@@ -81,30 +87,27 @@ def generate_travel_plan(message, user_preferences):
         # Split into two plans
         plans = content.split('---')
         if len(plans) != 2:
-            logger.warning("OpenAI didn't return two plans, attempting to split content")
+            logger.warning(
+                "OpenAI didn't return two plans, attempting to split content")
             # Fallback: split content in half
             mid = len(content) // 2
             plans = [content[:mid], content[mid:]]
 
         # Format the response as JSON
         formatted_response = {
-            "status": "success",
-            "alternatives": [
-                {
-                    "id": "option_1",
-                    "content": plans[0].strip(),
-                    "type": "itinerary"
-                },
-                {
-                    "id": "option_2",
-                    "content": plans[1].strip(),
-                    "type": "itinerary"
-                }
-            ]
+            "status":
+            "success",
+            "alternatives": [{
+                "id": "option_1",
+                "content": plans[0].strip(),
+                "type": "itinerary"
+            }, {
+                "id": "option_2",
+                "content": plans[1].strip(),
+                "type": "itinerary"
+            }]
         }
 
-        # Verify JSON serialization
-        json.dumps(formatted_response)  # This will raise an error if not JSON serializable
         return formatted_response
 
     except RateLimitError as e:
@@ -119,11 +122,13 @@ def generate_travel_plan(message, user_preferences):
         logger.error(f"Error generating travel plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
 
+
 def analyze_user_preferences(query: str, selected_response: str):
     """
     Analyze user preferences based on their query and selected response
     """
     logger.debug("Starting preference analysis")
+    logger.debug(f"Using model: {DEFAULT_MODEL}")
     logger.debug(f"Query: {query}")
     logger.debug(f"Selected response length: {len(selected_response)}")
 
@@ -160,17 +165,21 @@ def analyze_user_preferences(query: str, selected_response: str):
 
         logger.debug("Making OpenAI API call for preference analysis")
         response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": analysis_prompt}
-            ],
-            max_tokens=1000,
-            temperature=0.3
+            model=DEFAULT_MODEL,
+            messages=[{
+                "role": "system",
+                "content": system_prompt
+            }, {
+                "role": "user",
+                "content": analysis_prompt
+            }],
+            max_tokens=MAX_TOKENS_ANALYSIS,
+            temperature=0.3  # Lower temperature for more consistent analysis
         )
 
         analysis_result = response.choices[0].message.content
-        logger.debug(f"Received preference analysis (length: {len(analysis_result)})")
+        logger.debug(
+            f"Received preference analysis (length: {len(analysis_result)})")
         return analysis_result
 
     except Exception as e:
