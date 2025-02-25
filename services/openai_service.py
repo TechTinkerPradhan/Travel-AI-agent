@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
+    print("ERROR: OPENAI_API_KEY is not set")
     logger.error("OPENAI_API_KEY is not set")
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
-logger.info(f"Initializing OpenAI client with API key starting with: {OPENAI_API_KEY[:8]}...")
+print(f"Using OpenAI API key starting with: {OPENAI_API_KEY[:8]}...")
 client = OpenAI(api_key=OPENAI_API_KEY)
 agent_registry = AgentRegistry()
 
@@ -23,9 +24,9 @@ def generate_travel_plan(message, user_preferences):
     Generate travel recommendations using OpenAI's API with enhanced error handling
     """
     try:
-        logger.debug("Starting travel plan generation")
-        logger.debug(f"Message: {message}")
-        logger.debug(f"User preferences: {user_preferences}")
+        print("=== OpenAI Service Debug ===")
+        print(f"Message: {message}")
+        print(f"User preferences: {user_preferences}")
 
         # Prepare context with user preferences
         preferences_context = "\n".join([
@@ -33,7 +34,7 @@ def generate_travel_plan(message, user_preferences):
             for key, value in user_preferences.items()
             if value
         ])
-        logger.debug(f"User preferences context: {preferences_context}")
+        print(f"Preferences context: {preferences_context}")
 
         system_prompt = """You are a travel planning assistant. You will provide TWO different travel plans.
         Each plan should be well-formatted with:
@@ -60,30 +61,37 @@ def generate_travel_plan(message, user_preferences):
         3. Cost considerations where applicable
         """
 
-        logger.debug("Making OpenAI API call")
-        logger.debug("System prompt length: %d", len(system_prompt))
-        logger.debug("Full prompt length: %d", len(full_prompt))
+        print("Making OpenAI API call...")
+        print(f"System prompt length: {len(system_prompt)}")
+        print(f"Full prompt length: {len(full_prompt)}")
 
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": full_prompt}
-            ],
-            max_tokens=2000,
-            temperature=0.7
-        )
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=2000,
+                temperature=0.7
+            )
+            print("OpenAI API call successful")
+            print(f"Response type: {type(response)}")
+            print(f"Response: {response}")
 
-        logger.debug("Received OpenAI response")
-        logger.debug(f"Response status: {response.model_dump()}")
+        except Exception as api_error:
+            print(f"OpenAI API call failed: {str(api_error)}")
+            raise
 
         content = response.choices[0].message.content
-        logger.debug(f"Generated content length: {len(content)}")
+        print(f"Content length: {len(content)}")
+        print(f"Content preview: {content[:200]}...")
 
         # Split into two plans
         plans = content.split('---')
         if len(plans) != 2:
-            logger.warning("OpenAI didn't return two plans, attempting to split content")
+            print("Warning: Content not properly split into two plans")
+            print(f"Number of plans found: {len(plans)}")
             # Fallback: split content in half
             mid = len(content) // 2
             plans = [content[:mid], content[mid:]]
@@ -101,22 +109,27 @@ def generate_travel_plan(message, user_preferences):
             ]
         }
 
-        logger.debug("Successfully formatted response")
+        print("Final response formatted successfully")
+        print(f"Response structure: {formatted_response.keys()}")
         return formatted_response
 
     except RateLimitError as e:
+        print(f"OpenAI Rate limit error: {str(e)}")
         logger.error(f"OpenAI Rate limit error: {str(e)}")
         raise Exception("Rate limit reached. Please try again in a few moments.")
 
     except APIError as e:
+        print(f"OpenAI API error: {str(e)}")
         logger.error(f"OpenAI API error: {str(e)}")
         raise Exception(f"API Error: {str(e)}")
 
     except APIConnectionError as e:
+        print(f"OpenAI Connection error: {str(e)}")
         logger.error(f"OpenAI Connection error: {str(e)}")
         raise Exception("Could not connect to OpenAI. Please check your internet connection.")
 
     except Exception as e:
+        print(f"Unexpected error in generate_travel_plan: {str(e)}")
         logger.error(f"Unexpected error in generate_travel_plan: {str(e)}", exc_info=True)
         raise Exception(f"Failed to generate travel plan: {str(e)}")
 

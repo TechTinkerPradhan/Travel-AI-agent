@@ -78,42 +78,52 @@ def register_routes(app):
     def chat():
         """Handle user chat message to generate itinerary plan"""
         try:
+            print("=== Chat Request Debug ===")
             data = request.json
+            print(f"Request data: {data}")
+
             if not data:
-                logger.error("No data provided in chat request")
+                print("Error: No data provided")
                 return jsonify({
                     "status": "error",
                     "message": "No data provided"
                 }), 400
 
             message = data.get("message", "").strip()
+            print(f"Processing message: {message}")
+
             if not message:
-                logger.error("Empty message in chat request")
+                print("Error: Empty message")
                 return jsonify({
                     "status": "error",
                     "message": "Message cannot be empty"
                 }), 400
 
             user_id = data.get("user_id", "default_user")
-            logger.debug(f"Processing chat request for user {user_id}: {message[:50]}...")
+            print(f"User ID: {user_id}")
 
             # Get user preferences (empty for development)
             prefs = {}
 
             # Generate travel plan
             try:
+                print("Calling generate_travel_plan...")
                 plan_result = generate_travel_plan(message, prefs)
+                print(f"Plan result type: {type(plan_result)}")
+                print(f"Plan result: {plan_result}")
+
                 if not isinstance(plan_result, dict):
-                    logger.error(f"Invalid plan result format: {type(plan_result)}")
+                    print(f"Invalid plan result format: {type(plan_result)}")
                     return jsonify({
                         "status": "error",
                         "message": "Invalid response format from travel planner"
                     }), 500
 
-                logger.debug("Successfully generated travel plan")
+                print("Successfully generated travel plan")
                 return jsonify(plan_result)
 
             except Exception as e:
+                print(f"Error in generate_travel_plan: {str(e)}")
                 logger.error(f"Error generating travel plan: {e}", exc_info=True)
                 return jsonify({
                     "status": "error",
@@ -121,6 +131,7 @@ def register_routes(app):
                 }), 500
 
         except Exception as e:
+            print(f"Unhandled error in chat endpoint: {str(e)}")
             logger.error(f"Unhandled error in chat endpoint: {e}", exc_info=True)
             return jsonify({
                 "status": "error",
