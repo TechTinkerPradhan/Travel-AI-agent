@@ -21,16 +21,19 @@ class CalendarService:
     def create_events_from_plan(self, itinerary_content: str, start_date: str, user_email: str) -> list:
         """Create calendar events from an itinerary"""
         try:
-            logger.debug("Starting calendar event creation")
-            logger.debug(f"Processing itinerary for start date: {start_date}")
+            logger.debug(f"Starting calendar event creation for user: {user_email}")
 
-            # Get credentials from session
+            # Verify credentials
             if 'google_calendar_credentials' not in session:
                 raise ValueError("Google Calendar credentials not found in session")
 
             credentials = session['google_calendar_credentials']
+            logger.debug("Retrieved credentials from session")
+
+            # Initialize Google Calendar API
             creds = Credentials.from_authorized_user_info(credentials, self.SCOPES)
             service = build('calendar', 'v3', credentials=creds)
+            logger.debug("Successfully initialized Calendar API service")
 
             # Parse days and events
             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -38,14 +41,18 @@ class CalendarService:
 
             # Split content into days
             days = itinerary_content.split('## Day')
+            logger.debug(f"Found {len(days)-1} days in itinerary")
+
             for day_content in days[1:]:  # Skip first empty split
                 try:
                     # Extract day number
                     day_num = int(day_content.split(':')[0].strip())
                     current_date = start_dt + timedelta(days=day_num - 1)
+                    logger.debug(f"Processing Day {day_num}")
 
                     # Find all time-based activities
                     activities = re.findall(r'-\s*(\d{1,2}:\d{2}):\s*(.+?)(?=(?:-\s*\d{1,2}:\d{2}:|$))', day_content, re.DOTALL)
+                    logger.debug(f"Found {len(activities)} activities for Day {day_num}")
 
                     for time_str, activity_desc in activities:
                         try:
@@ -61,70 +68,83 @@ class CalendarService:
                                 minute
                             )
 
-                            # Default duration 1 hour
-                            duration = 60
-                            if '(' in activity_desc and ')' in activity_desc:
-                                duration_match = re.search(r'\((\d+)\s*(hour|min|minutes)?s?\)', activity_desc)
-                                if duration_match:
-                                    amount = int(duration_match.group(1))
-                                    unit = duration_match.group(2) or 'min'
-                                    duration = amount * 60 if 'hour' in unit else amount
+                            # Calculate duration
+                            duration = 60  # Default 1 hour
+                            duration_match = re.search(r'\((\d+)\s*(hour|min|minutes)?s?\)', activity_desc)
+                            if duration_match:
+                                amount = int(duration_match.group(1))
+                                unit = duration_match.group(2) or 'min'
+                                duration = amount * 60 if 'hour' in unit else amount
+                                activity_desc = re.sub(r'\([^)]*\)', '', activity_desc)
 
-                            # Clean up description
-                            description = re.sub(r'\([^)]*\)', '', activity_desc).strip()
-
-                            # Extract location if present
+                            # Extract location
                             location = ''
-                            loc_match = re.search(r'\*\*([^*]+)\*\*', description)
+                            loc_match = re.search(r'\*\*([^*]+)\*\*', activity_desc)
                             if loc_match:
                                 location = loc_match.group(1)
-                                description = description.replace(f"**{location}**", "").strip()
+                                activity_desc = activity_desc.replace(f"**{location}**", "")
 
-                            # Create calendar event
+                            activity_desc = activity_desc.strip()
+                            logger.debug(f"Creating event: {activity_desc} at {event_time}")
+
                             event = {
-                                'summary': description,
+                                'summary': f"Day {day_num}: {activity_desc}",
                                 'location': location,
-                                'description': f"Day {day_num} activity",
+                                'description': f"Travel Itinerary - Day {day_num}\n{activity_desc}",
                                 'start': {
                                     'dateTime': event_time.isoformat(),
-                                    'timeZone': 'UTC',
+                                    'timeZone': 'UTC'
                                 },
                                 'end': {
                                     'dateTime': (event_time + timedelta(minutes=duration)).isoformat(),
-                                    'timeZone': 'UTC',
+                                    'timeZone': 'UTC'
                                 },
                                 'attendees': [{'email': user_email}],
-                                'reminders': {'useDefault': True}
+                                'reminders': {
+                                    'useDefault': False,
+                                    'overrides': [
+                                        {'method': 'email', 'minutes': 24 * 60},
+                                        {'method': 'popup', 'minutes': 30}
+                                    ]
+                                }
                             }
 
-                            logger.debug(f"Creating event: {event['summary']} at {event['start']['dateTime']}")
-                            created_event = service.events().insert(
-                                calendarId='primary',
-                                body=event,
-                                sendUpdates='all'
-                            ).execute()
+                            try:
+                                created_event = service.events().insert(
+                                    calendarId='primary',
+                                    body=event,
+                                    sendUpdates='all'
+                                ).execute()
 
-                            events.append({
-                                'id': created_event['id'],
-                                'summary': created_event['summary'],
-                                'start': created_event['start']['dateTime'],
-                                'end': created_event['end']['dateTime']
-                            })
+                                logger.debug(f"Successfully created event: {created_event['id']}")
+
+                                events.append({
+                                    'id': created_event['id'],
+                                    'summary': created_event['summary'],
+                                    'start': created_event['start']['dateTime'],
+                                    'end': created_event['end']['dateTime']
+                                })
+                            except Exception as api_error:
+                                logger.error(f"Google Calendar API error: {str(api_error)}")
+                                raise ValueError(f"Failed to create event in Google Calendar: {str(api_error)}")
 
                         except Exception as activity_error:
-                            logger.error(f"Error creating event: {str(activity_error)}")
-                            continue
+                            logger.error(f"Error processing activity: {str(activity_error)}")
+                            raise ValueError(f"Failed to process activity: {str(activity_error)}")
 
                 except Exception as day_error:
                     logger.error(f"Error processing day: {str(day_error)}")
-                    continue
+                    raise ValueError(f"Failed to process day: {str(day_error)}")
+
+            if not events:
+                raise ValueError("No events were created. Please check the itinerary format.")
 
             logger.debug(f"Successfully created {len(events)} calendar events")
             return events
 
         except Exception as e:
             logger.error(f"Error in create_events_from_plan: {str(e)}")
-            raise ValueError(f"Failed to create calendar events: {str(e)}")
+            raise ValueError(str(e))
 
     def check_availability(self):
         """Check if Google Calendar service is available"""
@@ -148,6 +168,7 @@ class CalendarService:
 
         flow = Flow.from_client_config(client_config, scopes=self.SCOPES)
         flow.redirect_uri = redirect_uri
+
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
@@ -162,8 +183,6 @@ class CalendarService:
             raise ValueError("Calendar service is not configured")
 
         redirect_uri = f"https://{self.replit_domain}/auth/google_callback"
-        logger.debug(f"Processing OAuth callback with redirect URI: {redirect_uri}")
-
         client_config = {
             "web": {
                 "client_id": self.client_id,
@@ -182,15 +201,14 @@ class CalendarService:
             )
             flow.redirect_uri = redirect_uri
 
-            # Ensure request URL is properly formatted
+            # Handle http vs https
             if request_url.startswith('http://'):
                 request_url = 'https://' + request_url[7:]
 
-            logger.debug(f"Fetching token with authorization response URL")
             flow.fetch_token(authorization_response=request_url)
             creds = flow.credentials
 
-            logger.info("Successfully obtained OAuth credentials")
+            logger.debug("Successfully obtained OAuth credentials")
             return {
                 'token': creds.token,
                 'refresh_token': creds.refresh_token,

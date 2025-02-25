@@ -212,9 +212,15 @@ def register_routes(app):
                     user_email=current_user.email
                 )
 
+                if not events:
+                    return jsonify({
+                        "status": "error",
+                        "message": "No events were created. Please check the itinerary format."
+                    }), 400
+
                 return jsonify({
                     "status": "success",
-                    "message": "Successfully added to calendar",
+                    "message": f"Successfully added {len(events)} events to your calendar",
                     "events": events
                 })
 
@@ -222,7 +228,7 @@ def register_routes(app):
                 logger.error(f"Error creating calendar events: {str(e)}")
                 return jsonify({
                     "status": "error",
-                    "message": "Failed to create calendar events. Please try again."
+                    "message": str(e)
                 }), 500
 
         except Exception as e:
