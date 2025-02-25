@@ -22,44 +22,53 @@ class CalendarService:
         """Create calendar events from an itinerary"""
         try:
             logger.debug(f"Starting calendar event creation for user: {user_email}")
+            logger.debug(f"Raw itinerary content: {itinerary_content[:100]}...")  # Log first 100 chars
 
-            # Verify credentials
             if 'google_calendar_credentials' not in session:
                 raise ValueError("Google Calendar credentials not found in session")
 
-            credentials = session['google_calendar_credentials']
-            creds = Credentials.from_authorized_user_info(credentials, self.SCOPES)
+            creds = Credentials.from_authorized_user_info(session['google_calendar_credentials'], self.SCOPES)
             service = build('calendar', 'v3', credentials=creds)
-            logger.debug("Successfully initialized Calendar API service")
 
-            # Parse days and events
             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
             events = []
 
-            # Split content into days
-            days = itinerary_content.split('## Day')
-            logger.debug(f"Found {len(days)-1} days in itinerary")
+            # Split by day markers and remove empty strings
+            days = [day.strip() for day in itinerary_content.split('## Day') if day.strip()]
+            logger.debug(f"Found {len(days)} days in itinerary")
 
-            for day_content in days[1:]:  # Skip first empty split
+            for day_content in days:
                 try:
-                    # Extract day number and title
-                    day_header = day_content.split('\n')[0]
-                    day_num = int(day_header.split(':')[0].strip())
-                    current_date = start_dt + timedelta(days=day_num - 1)
+                    # Extract day number
+                    day_match = re.match(r'(\d+):', day_content)
+                    if not day_match:
+                        logger.warning(f"Could not find day number in: {day_content[:50]}...")
+                        continue
 
+                    day_num = int(day_match.group(1))
+                    current_date = start_dt + timedelta(days=day_num - 1)
                     logger.debug(f"Processing Day {day_num}")
 
-                    # Find all time-based activities
-                    # Match pattern: "- HH:MM: Description"
-                    activities = re.findall(r'-\s*(\d{1,2}:\d{2}):\s*(.+?)(?=(?:\n-\s*\d{1,2}:\d{2}:|\Z))', day_content, re.DOTALL)
-                    logger.debug(f"Found {len(activities)} activities for Day {day_num}")
+                    # Find all activities (lines starting with dash and containing time)
+                    activity_lines = [line.strip() for line in day_content.split('\n') 
+                                   if line.strip().startswith('-') and re.search(r'\d{1,2}:\d{2}', line)]
 
-                    for time_str, activity_desc in activities:
+                    logger.debug(f"Found {len(activity_lines)} activities for Day {day_num}")
+                    for activity_line in activity_lines:
                         try:
-                            # Parse time
-                            hour, minute = map(int, time_str.split(':'))
+                            # Extract time
+                            time_match = re.search(r'(\d{1,2}):(\d{2})', activity_line)
+                            if not time_match:
+                                continue
 
-                            # Create event start time
+                            hour = int(time_match.group(1))
+                            minute = int(time_match.group(2))
+
+                            # Get the description (everything after the time)
+                            desc_start = activity_line.find(':') + 1
+                            activity_desc = activity_line[desc_start:].strip()
+
+                            # Create event datetime
                             event_time = datetime(
                                 current_date.year,
                                 current_date.month,
@@ -68,32 +77,30 @@ class CalendarService:
                                 minute
                             )
 
-                            # Calculate duration
+                            # Parse duration if present
                             duration = 60  # Default 1 hour
-                            duration_match = re.search(r'\((\d+)\s*(hour|min|minutes)?s?\)', activity_desc)
+                            duration_match = re.search(r'\((\d+)\s*(hour|min|minutes?)?s?\)', activity_desc)
                             if duration_match:
                                 amount = int(duration_match.group(1))
                                 unit = duration_match.group(2) or 'min'
                                 duration = amount * 60 if 'hour' in unit else amount
                                 activity_desc = re.sub(r'\([^)]*\)', '', activity_desc)
 
-                            # Extract location
+                            # Extract location if present
                             location = ''
                             loc_match = re.search(r'\*\*([^*]+)\*\*', activity_desc)
                             if loc_match:
                                 location = loc_match.group(1)
                                 activity_desc = activity_desc.replace(f"**{location}**", "")
 
-                            # Clean up description and format title
-                            activity_desc = activity_desc.strip()
-                            event_title = f"Day {day_num}: {time_str}: {activity_desc}"
-
-                            logger.debug(f"Creating event: {event_title}")
+                            # Format title as shown in screenshot
+                            time_str = f"{hour:02d}:{minute:02d}"
+                            event_title = f"Day {day_num}: {time_str}: {activity_desc.strip()}"
 
                             event = {
                                 'summary': event_title,
                                 'location': location,
-                                'description': f"Part of your Day {day_num} itinerary",
+                                'description': f"Part of Day {day_num}",
                                 'start': {
                                     'dateTime': event_time.isoformat(),
                                     'timeZone': 'UTC'
@@ -106,42 +113,36 @@ class CalendarService:
                                 'reminders': {
                                     'useDefault': False,
                                     'overrides': [
-                                        {'method': 'email', 'minutes': 24 * 60},
                                         {'method': 'popup', 'minutes': 30}
                                     ]
                                 },
-                                'transparency': 'transparent'  # Shows as 'free' in calendar
+                                'transparency': 'transparent'
                             }
 
-                            try:
-                                created_event = service.events().insert(
-                                    calendarId='primary',
-                                    body=event,
-                                    sendUpdates='all'
-                                ).execute()
+                            created_event = service.events().insert(
+                                calendarId='primary',
+                                body=event,
+                                sendUpdates='none'
+                            ).execute()
 
-                                logger.debug(f"Successfully created event: {created_event['id']}")
+                            logger.debug(f"Created event: {event_title}")
+                            events.append({
+                                'id': created_event['id'],
+                                'summary': created_event['summary'],
+                                'start': created_event['start']['dateTime'],
+                                'end': created_event['end']['dateTime']
+                            })
 
-                                events.append({
-                                    'id': created_event['id'],
-                                    'summary': created_event['summary'],
-                                    'start': created_event['start']['dateTime'],
-                                    'end': created_event['end']['dateTime']
-                                })
-                            except Exception as api_error:
-                                logger.error(f"Google Calendar API error: {str(api_error)}")
-                                raise ValueError(f"Failed to create event in Google Calendar: {str(api_error)}")
+                        except Exception as e:
+                            logger.error(f"Error processing activity: {str(e)}")
+                            continue
 
-                        except Exception as activity_error:
-                            logger.error(f"Error processing activity: {str(activity_error)}")
-                            raise ValueError(f"Failed to process activity: {str(activity_error)}")
-
-                except Exception as day_error:
-                    logger.error(f"Error processing day: {str(day_error)}")
-                    raise ValueError(f"Failed to process day: {str(day_error)}")
+                except Exception as e:
+                    logger.error(f"Error processing day: {str(e)}")
+                    continue
 
             if not events:
-                raise ValueError("No events were created. Please check the itinerary format.")
+                raise ValueError("No events could be created. Please check the itinerary format.")
 
             logger.debug(f"Successfully created {len(events)} calendar events")
             return events
@@ -151,11 +152,9 @@ class CalendarService:
             raise ValueError(str(e))
 
     def check_availability(self):
-        """Check if Google Calendar service is available"""
         return self.is_available
 
     def get_authorization_url(self):
-        """Generate the Google OAuth2 authorization URL."""
         if not self.check_availability():
             raise ValueError("Calendar service is not configured")
 
@@ -172,7 +171,6 @@ class CalendarService:
 
         flow = Flow.from_client_config(client_config, scopes=self.SCOPES)
         flow.redirect_uri = redirect_uri
-
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
@@ -182,7 +180,6 @@ class CalendarService:
         return authorization_url, state
 
     def verify_oauth2_callback(self, request_url, session_state):
-        """Handle the callback from Google with authorization code"""
         if not self.check_availability():
             raise ValueError("Calendar service is not configured")
 
@@ -205,14 +202,12 @@ class CalendarService:
             )
             flow.redirect_uri = redirect_uri
 
-            # Handle http vs https
             if request_url.startswith('http://'):
                 request_url = 'https://' + request_url[7:]
 
             flow.fetch_token(authorization_response=request_url)
             creds = flow.credentials
 
-            logger.debug("Successfully obtained OAuth credentials")
             return {
                 'token': creds.token,
                 'refresh_token': creds.refresh_token,
@@ -226,7 +221,6 @@ class CalendarService:
             raise
 
     def get_configuration_error(self):
-        """Get error message about configuration issues"""
         if not self.client_id:
             return "Google Calendar Client ID is missing"
         if not self.client_secret:
