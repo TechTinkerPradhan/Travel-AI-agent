@@ -22,7 +22,7 @@ class CalendarService:
         """Create calendar events from an itinerary"""
         try:
             logger.debug(f"Starting calendar event creation for user: {user_email}")
-            logger.debug(f"Raw itinerary content: {itinerary_content[:100]}...")  # Log first 100 chars
+            logger.debug(f"Raw itinerary content: {itinerary_content}")
 
             if 'google_calendar_credentials' not in session:
                 raise ValueError("Google Calendar credentials not found in session")
@@ -33,118 +33,108 @@ class CalendarService:
             start_dt = datetime.strptime(start_date, '%Y-%m-%d')
             events = []
 
-            # Split by day markers and remove empty strings
-            days = [day.strip() for day in itinerary_content.split('## Day') if day.strip()]
-            logger.debug(f"Found {len(days)} days in itinerary")
+            # Extract days and activities using pattern matching
+            day_pattern = r'Day (\d+):'
+            time_pattern = r'-\s*(\d{1,2}):(\d{2}):\s*(.+)'
 
-            for day_content in days:
-                try:
-                    # Extract day number
-                    day_match = re.match(r'(\d+):', day_content)
-                    if not day_match:
-                        logger.warning(f"Could not find day number in: {day_content[:50]}...")
-                        continue
+            # Split content into lines
+            lines = itinerary_content.split('\n')
+            current_day = None
 
-                    day_num = int(day_match.group(1))
-                    current_date = start_dt + timedelta(days=day_num - 1)
-                    logger.debug(f"Processing Day {day_num}")
-
-                    # Find all activities (lines starting with dash and containing time)
-                    activity_lines = [line.strip() for line in day_content.split('\n') 
-                                   if line.strip().startswith('-') and re.search(r'\d{1,2}:\d{2}', line)]
-
-                    logger.debug(f"Found {len(activity_lines)} activities for Day {day_num}")
-                    for activity_line in activity_lines:
-                        try:
-                            # Extract time
-                            time_match = re.search(r'(\d{1,2}):(\d{2})', activity_line)
-                            if not time_match:
-                                continue
-
-                            hour = int(time_match.group(1))
-                            minute = int(time_match.group(2))
-
-                            # Get the description (everything after the time)
-                            desc_start = activity_line.find(':') + 1
-                            activity_desc = activity_line[desc_start:].strip()
-
-                            # Create event datetime
-                            event_time = datetime(
-                                current_date.year,
-                                current_date.month,
-                                current_date.day,
-                                hour,
-                                minute
-                            )
-
-                            # Parse duration if present
-                            duration = 60  # Default 1 hour
-                            duration_match = re.search(r'\((\d+)\s*(hour|min|minutes?)?s?\)', activity_desc)
-                            if duration_match:
-                                amount = int(duration_match.group(1))
-                                unit = duration_match.group(2) or 'min'
-                                duration = amount * 60 if 'hour' in unit else amount
-                                activity_desc = re.sub(r'\([^)]*\)', '', activity_desc)
-
-                            # Extract location if present
-                            location = ''
-                            loc_match = re.search(r'\*\*([^*]+)\*\*', activity_desc)
-                            if loc_match:
-                                location = loc_match.group(1)
-                                activity_desc = activity_desc.replace(f"**{location}**", "")
-
-                            # Format title as shown in screenshot
-                            time_str = f"{hour:02d}:{minute:02d}"
-                            event_title = f"Day {day_num}: {time_str}: {activity_desc.strip()}"
-
-                            event = {
-                                'summary': event_title,
-                                'location': location,
-                                'description': f"Part of Day {day_num}",
-                                'start': {
-                                    'dateTime': event_time.isoformat(),
-                                    'timeZone': 'UTC'
-                                },
-                                'end': {
-                                    'dateTime': (event_time + timedelta(minutes=duration)).isoformat(),
-                                    'timeZone': 'UTC'
-                                },
-                                'attendees': [{'email': user_email}],
-                                'reminders': {
-                                    'useDefault': False,
-                                    'overrides': [
-                                        {'method': 'popup', 'minutes': 30}
-                                    ]
-                                },
-                                'transparency': 'transparent'
-                            }
-
-                            created_event = service.events().insert(
-                                calendarId='primary',
-                                body=event,
-                                sendUpdates='none'
-                            ).execute()
-
-                            logger.debug(f"Created event: {event_title}")
-                            events.append({
-                                'id': created_event['id'],
-                                'summary': created_event['summary'],
-                                'start': created_event['start']['dateTime'],
-                                'end': created_event['end']['dateTime']
-                            })
-
-                        except Exception as e:
-                            logger.error(f"Error processing activity: {str(e)}")
-                            continue
-
-                except Exception as e:
-                    logger.error(f"Error processing day: {str(e)}")
+            for line in lines:
+                line = line.strip()
+                if not line:
                     continue
 
-            if not events:
-                raise ValueError("No events could be created. Please check the itinerary format.")
+                # Check for day header
+                day_match = re.search(day_pattern, line)
+                if day_match:
+                    current_day = int(day_match.group(1))
+                    logger.debug(f"Processing Day {current_day}")
+                    continue
 
-            logger.debug(f"Successfully created {len(events)} calendar events")
+                # Check for activity
+                if current_day and (time_match := re.search(time_pattern, line)):
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+                    activity_desc = time_match.group(3).strip()
+
+                    # Create event datetime
+                    event_time = datetime(
+                        start_dt.year,
+                        start_dt.month,
+                        start_dt.day,
+                        hour,
+                        minute
+                    ) + timedelta(days=current_day - 1)
+
+                    # Extract location if present
+                    location = ''
+                    loc_match = re.search(r'\*\*([^*]+)\*\*', activity_desc)
+                    if loc_match:
+                        location = loc_match.group(1)
+                        activity_desc = activity_desc.replace(f"**{location}**", "")
+
+                    # Extract duration if present
+                    duration = 60  # Default 1 hour
+                    duration_match = re.search(r'\((\d+)\s*(hour|min|minutes?)?s?\)', activity_desc)
+                    if duration_match:
+                        amount = int(duration_match.group(1))
+                        unit = duration_match.group(2) or 'min'
+                        duration = amount * 60 if 'hour' in unit else amount
+                        activity_desc = re.sub(r'\([^)]*\)', '', activity_desc)
+
+                    # Clean up description and format title
+                    activity_desc = activity_desc.strip()
+                    time_str = f"{hour:02d}:{minute:02d}"
+                    event_title = f"Day {current_day}: {time_str}: {activity_desc}"
+
+                    logger.debug(f"Creating event: {event_title}")
+
+                    event = {
+                        'summary': event_title,
+                        'location': location,
+                        'description': f"Part of Day {current_day}",
+                        'start': {
+                            'dateTime': event_time.isoformat(),
+                            'timeZone': 'UTC'
+                        },
+                        'end': {
+                            'dateTime': (event_time + timedelta(minutes=duration)).isoformat(),
+                            'timeZone': 'UTC'
+                        },
+                        'attendees': [{'email': user_email}],
+                        'reminders': {
+                            'useDefault': False,
+                            'overrides': [
+                                {'method': 'popup', 'minutes': 30}
+                            ]
+                        },
+                        'transparency': 'transparent'
+                    }
+
+                    try:
+                        created_event = service.events().insert(
+                            calendarId='primary',
+                            body=event,
+                            sendUpdates='none'
+                        ).execute()
+
+                        events.append({
+                            'id': created_event['id'],
+                            'summary': created_event['summary'],
+                            'start': created_event['start']['dateTime'],
+                            'end': created_event['end']['dateTime']
+                        })
+                        logger.debug(f"Successfully created event: {event_title}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to create event {event_title}: {str(e)}")
+                        continue
+
+            if not events:
+                raise ValueError("No events could be created. Make sure the itinerary contains properly formatted activities with times.")
+
             return events
 
         except Exception as e:
