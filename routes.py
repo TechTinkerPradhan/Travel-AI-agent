@@ -35,68 +35,43 @@ def register_routes(app):
         try:
             logger.debug("Received chat request")
 
-            # Validate request JSON
             if not request.is_json:
-                logger.error("Request is not JSON")
                 return jsonify({
                     "status": "error",
                     "message": "Request must be JSON"
                 }), 400
 
             data = request.get_json()
-            if not data or not isinstance(data, dict):
-                logger.error("Invalid JSON data structure")
-                return jsonify({
-                    "status": "error",
-                    "message": "Invalid JSON data structure"
-                }), 400
-
             message = data.get("message", "").strip()
+
             if not message:
-                logger.error("Empty message received")
                 return jsonify({
                     "status": "error",
                     "message": "Message cannot be empty"
                 }), 400
 
-            user_id = str(current_user.id)
-            logger.debug(f"Processing chat request for user {user_id}")
-
             # Get user preferences
             prefs = {}
             try:
-                user_prefs = airtable_service.get_user_preferences(user_id)
+                user_prefs = airtable_service.get_user_preferences(str(current_user.id))
                 if user_prefs:
                     prefs = user_prefs
-                    logger.debug(f"Retrieved user preferences: {prefs}")
             except Exception as e:
                 logger.warning(f"Failed to fetch preferences: {e}")
 
             # Generate travel plan
             try:
-                plan_result = generate_travel_plan(message, prefs)
-
-                # Validate response structure
-                if not isinstance(plan_result, dict):
-                    raise ValueError("Invalid response type from travel plan generator")
-
-                if "status" not in plan_result or "alternatives" not in plan_result:
-                    raise ValueError("Missing required fields in travel plan response")
-
-                # Ensure JSON serialization works
-                response = jsonify(plan_result)
-                response.headers['Content-Type'] = 'application/json'
-                return response
-
+                result = generate_travel_plan(message, prefs)
+                return jsonify(result)
             except Exception as e:
-                logger.error(f"Travel plan generation error: {e}", exc_info=True)
+                logger.error(f"Travel plan generation error: {str(e)}")
                 return jsonify({
                     "status": "error",
                     "message": str(e)
                 }), 500
 
         except Exception as e:
-            logger.error(f"Unhandled chat endpoint error: {e}", exc_info=True)
+            logger.error(f"Chat endpoint error: {str(e)}")
             return jsonify({
                 "status": "error",
                 "message": "An unexpected error occurred"
